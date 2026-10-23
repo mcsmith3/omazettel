@@ -1,5 +1,7 @@
 #include "vault.h"
 
+#include "notestree.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -18,14 +20,7 @@ const int maxRecentFolders = 8;
 const QStringList noteSuffixes{QStringLiteral("md"), QStringLiteral("markdown")};
 }
 
-Vault::Vault(QObject *parent) : QObject(parent), m_model(new QFileSystemModel(this)) {
-    // Folders and Markdown files only. Hidden entries such as .git and
-    // .omazettel stay out of the tree.
-    m_model->setFilter(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
-    m_model->setNameFilters({QStringLiteral("*.md"), QStringLiteral("*.markdown")});
-    m_model->setNameFilterDisables(false);
-    m_model->setReadOnly(true);
-
+Vault::Vault(QObject *parent) : QObject(parent), m_model(new NotesTree(this)) {
     QSettings settings;
     m_recentFolders = settings.value(recentSetting).toStringList();
     m_sidebarVisible = settings.value(sidebarVisibleSetting, true).toBool();
@@ -42,8 +37,13 @@ QString Vault::rootName() const {
     return m_rootPath.isEmpty() ? QString() : QFileInfo(m_rootPath).fileName();
 }
 
+QAbstractItemModel *Vault::model() const {
+    return m_model;
+}
+
+// The tree's top level is the notes folder's contents.
 QModelIndex Vault::rootIndex() const {
-    return m_rootPath.isEmpty() ? QModelIndex() : m_model->index(m_rootPath);
+    return QModelIndex();
 }
 
 void Vault::setSidebarVisible(bool visible) {
@@ -102,8 +102,7 @@ bool Vault::openFolder(const QString &path) {
     const QString root = info.canonicalFilePath();
     if (root != m_rootPath) {
         m_rootPath = root;
-        m_model->setRootPath(root);
-        m_model->sort(0, Qt::AscendingOrder);
+        m_model->setRoot(root);
         emit rootPathChanged();
     }
     QSettings().setValue(folderSetting, root);
@@ -120,7 +119,7 @@ void Vault::closeFolder() {
     if (m_rootPath.isEmpty())
         return;
     m_rootPath.clear();
-    m_model->setRootPath(QString());
+    m_model->setRoot(QString());
     QSettings settings;
     settings.remove(folderSetting);
     settings.remove(lastNoteSetting);
@@ -148,11 +147,11 @@ void Vault::addRecent(const QString &path) {
 }
 
 QString Vault::filePath(const QModelIndex &index) const {
-    return index.isValid() ? m_model->filePath(index) : QString();
+    return m_model->filePath(index);
 }
 
 bool Vault::isFolder(const QModelIndex &index) const {
-    return index.isValid() && m_model->isDir(index);
+    return m_model->isFolder(index);
 }
 
 bool Vault::isFolderPath(const QString &path) const {
@@ -162,7 +161,7 @@ bool Vault::isFolderPath(const QString &path) const {
 QString Vault::displayName(const QModelIndex &index) const {
     if (!index.isValid())
         return QString();
-    const QFileInfo info = m_model->fileInfo(index);
+    const QFileInfo info(m_model->filePath(index));
     if (info.isDir())
         return info.fileName();
     return noteSuffixes.contains(info.suffix().toLower()) ? info.completeBaseName()
@@ -170,7 +169,15 @@ QString Vault::displayName(const QModelIndex &index) const {
 }
 
 QModelIndex Vault::indexForPath(const QString &path) const {
-    return contains(path) ? m_model->index(path) : QModelIndex();
+    if (!contains(path))
+        return QModelIndex();
+    QModelIndex index = m_model->indexForPath(path);
+    if (!index.isValid() && QFileInfo::exists(path)) {
+        // Made a moment ago, before the folder watcher noticed.
+        m_model->refresh();
+        index = m_model->indexForPath(path);
+    }
+    return index;
 }
 
 bool Vault::contains(const QString &path) const {
@@ -287,6 +294,7 @@ QString Vault::createNote(const QString &folder, const QString &title) {
         return QString();
     }
     setError(QString());
+    m_model->refresh();
     emit contentsChanged();
     return path;
 }
@@ -307,6 +315,7 @@ QString Vault::createFolder(const QString &parentFolder, const QString &name) {
         return QString();
     }
     setError(QString());
+    m_model->refresh();
     return path;
 }
 
@@ -347,6 +356,7 @@ QString Vault::renamePath(const QString &path, const QString &newName) {
         setError(QStringLiteral("Could not rename %1.").arg(QFileInfo(from).fileName()));
         return QString();
     }
+    m_model->refresh();
     emit contentsChanged();
     return target;
 }
@@ -389,6 +399,7 @@ QString Vault::movePath(const QString &path, const QString &folder) {
         setError(QStringLiteral("Could not move %1.").arg(QFileInfo(from).fileName()));
         return QString();
     }
+    m_model->refresh();
     emit contentsChanged();
     return target;
 }
@@ -404,6 +415,7 @@ bool Vault::trashPath(const QString &path) {
         return false;
     }
     setError(QString());
+    m_model->refresh();
     emit contentsChanged();
     return true;
 }

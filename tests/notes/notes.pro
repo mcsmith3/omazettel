@@ -23,6 +23,7 @@ SOURCES += \
     ../../src/sync.cpp \
     ../../src/textdiff.cpp \
     ../../src/zettel.cpp \
+    ../../src/notestree.cpp \
     ../../src/vault.cpp
 HEADERS += \
     ../../src/cli.h \
@@ -40,6 +41,7 @@ HEADERS += \
     ../../src/sync.h \
     ../../src/textdiff.h \
     ../../src/zettel.h \
+    ../../src/notestree.h \
     ../../src/vault.h
 
 QT += widgets printsupport quickcontrols2 quickdialogs2 dbus
