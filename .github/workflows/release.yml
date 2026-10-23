@@ -32,7 +32,12 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono
+        # pacman's download sandboxes (Landlock and seccomp) fail inside the ARM
+        # container on GitHub's runners. The official x86_64 image already turns
+        # the filesystem one off; this throwaway build container turns both off.
+        run: |
+          sed -i 's/^#DisableSandbox/DisableSandbox/' /etc/pacman.conf
+          pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono
       - uses: actions/checkout@v4
       - name: Build, test and package
         env:
