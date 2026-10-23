@@ -71,7 +71,8 @@ tar -C dist -czf "dist/$dir.tar.gz" "$dir"
 rm -rf "dist/${dir:?}"
 
 if [[ $ref != pr ]]; then
-  (cd pkgbuild && PKGDEST="$ROOT/dist" CARCH="$arch" makepkg -f --noconfirm --nodeps)
+  # Arch Linux ARM defaults to .pkg.tar.xz; every release package is .zst.
+  (cd pkgbuild && PKGDEST="$ROOT/dist" PKGEXT=.pkg.tar.zst CARCH="$arch" makepkg -f --noconfirm --nodeps)
   rel="$(sed -n 's/^pkgrel=//p' pkgbuild/PKGBUILD)"
   cp "dist/omazettel-$ver-$rel-$arch.pkg.tar.zst" "dist/omazettel-$arch.pkg.tar.zst"
 fi
