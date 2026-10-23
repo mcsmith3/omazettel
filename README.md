@@ -123,7 +123,7 @@ your home directory. Qt 6 and an XDG desktop portal must already be installed
 as listed in [Requirements](#requirements); optional tools are needed only for
 their corresponding features.
 
-On Omarchy or Arch Linux, paste this in a terminal (it asks for your password):
+Or, on Omarchy or Arch Linux, paste this in a terminal (it asks for your password):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/mcsmith3/omazettel/master/install.sh | bash
@@ -136,6 +136,9 @@ from the release's source instead.
 
 **Update:** run the same line again. **Uninstall:** `sudo pacman -R omazettel`;
 your notes are untouched.
+
+Use one way or the other, not both: the store's copy (in `~/.local/bin`) would
+hide the system one, and each updates only its own.
 
 To install from a clone instead (for example, to try unreleased changes):
 
@@ -572,6 +575,26 @@ You need the [requirements](#requirements) above: Qt 6.6 or newer
 
 The tests cover the editor (from Omawrite) and OmaZettel's notes features,
 including real pandoc exports and two devices syncing through a git remote.
+
+### Making a release
+
+1. Set the version in `src/main.cpp` (`OMAZETTEL_VERSION`), `pkgbuild/PKGBUILD`
+   (`pkgver`, and `pkgrel=1`) and the status line at the top of this README.
+2. Write the release notes in `docs/releases/<version>.md`.
+3. Commit, then tag and push: `git tag -a omazettel-v<version> -m "OmaZettel <version>"`
+   and `git push origin master omazettel-v<version>`.
+
+The tag starts `.github/workflows/release.yml`. It builds and tests x86_64 and
+aarch64 in Arch containers with `bin/release-build` (which refuses a tag that
+doesn't match the version in the code), then publishes the release: the
+OmaStore tarballs, the pacman packages (also under the version-free names
+`install.sh` fetches), `checksums.txt`, `SHA256SUMS` and a build provenance
+attestation. To try the build before tagging, run it in the same container:
+
+```sh
+docker run --rm -v "$PWD:/w" -w /w archlinux:latest bash -c \
+  'pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono && bin/release-build omazettel-v<version>'
+```
 
 The code is laid out so changes from upstream Omawrite merge cleanly:
 OmaZettel's additions live in their own files (`src/vault.*`,

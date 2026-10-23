@@ -71,7 +71,8 @@ QHash<QString, QString> themeColors(const QString &colorsFile) {
         return colors;
 
     // Without it: the file's own keys, and the few aliases templates use most.
-    static const QRegularExpression lineRe(QStringLiteral("^\\s*([A-Za-z0-9_]+)\\s*=\\s*\"?([^\"#\\n]+)\"?"),
+    // A value may start with "#" (a colour); a "#" after it starts a comment.
+    static const QRegularExpression lineRe(QStringLiteral("^\\s*([A-Za-z0-9_]+)\\s*=\\s*\"?(#?[^\"#\\n]+)\"?"),
                                            QRegularExpression::MultilineOption);
     auto it = lineRe.globalMatch(readText(colorsFile));
     while (it.hasNext()) {

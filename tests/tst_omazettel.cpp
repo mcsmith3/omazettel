@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QFontDatabase>
 #include <QScopeGuard>
 #include <QThreadPool>
 #include <QSignalSpy>
@@ -1040,13 +1041,15 @@ private slots:
                  QStringLiteral("https://example.com"));
         QCOMPARE(urlUnder(only.x() + 1, only.y() + only.height() * 3), QString());
 
-        // A wide character counts across its whole width.
-        editor->setProperty("text", QStringLiteral("[\u5bbd](https://example.com)"));
-        const QRectF wide = boxAt(1);
-        const qreal wideRight = boxAt(2).x();
-        QVERIFY(wideRight - wide.x() > editor->property("font").value<QFont>().pixelSize() * 0.7);
-        QCOMPARE(urlUnder(wideRight - 1, wide.y() + wide.height() / 2),
-                 QStringLiteral("https://example.com"));
+        // A wide character counts across its whole width (where a font can draw one).
+        if (!QFontDatabase::families(QFontDatabase::SimplifiedChinese).isEmpty()) {
+            editor->setProperty("text", QStringLiteral("[\u5bbd](https://example.com)"));
+            const QRectF wide = boxAt(1);
+            const qreal wideRight = boxAt(2).x();
+            QVERIFY(wideRight - wide.x() > editor->property("font").value<QFont>().pixelSize() * 0.7);
+            QCOMPARE(urlUnder(wideRight - 1, wide.y() + wide.height() / 2),
+                     QStringLiteral("https://example.com"));
+        }
 
         // A right-to-left label runs the other way across the screen.
         editor->setProperty("text", QStringLiteral("[\u05e9\u05dc\u05d5\u05dd](https://example.org)"));

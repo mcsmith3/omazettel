@@ -567,12 +567,54 @@ QStringList notesUnder(const QString &folder) {
             continue;
         relative.append(rel);
     }
+    // Natural order compares runs of digits as numbers. QCollator's numeric
+    // mode does this only with a real locale, not in C/POSIX, so it is done
+    // here; the collator then orders the text between the numbers.
     QCollator collator;
-    collator.setNumericMode(true);
     collator.setCaseSensitivity(Qt::CaseInsensitive);
+    const auto natural = [&collator](const QString &a, const QString &b) {
+        int i = 0;
+        int j = 0;
+        while (i < a.size() && j < b.size()) {
+            if (a.at(i).isDigit() && b.at(j).isDigit()) {
+                int ie = i;
+                int je = j;
+                while (ie < a.size() && a.at(ie).isDigit())
+                    ++ie;
+                while (je < b.size() && b.at(je).isDigit())
+                    ++je;
+                QString x = a.mid(i, ie - i);
+                QString y = b.mid(j, je - j);
+                while (x.size() > 1 && x.startsWith(QLatin1Char('0')))
+                    x.remove(0, 1);
+                while (y.size() > 1 && y.startsWith(QLatin1Char('0')))
+                    y.remove(0, 1);
+                if (x.size() != y.size())
+                    return x.size() < y.size() ? -1 : 1;
+                if (const int order = x.compare(y))
+                    return order;
+                i = ie;
+                j = je;
+                continue;
+            }
+            int ie = i;
+            int je = j;
+            while (ie < a.size() && !a.at(ie).isDigit())
+                ++ie;
+            while (je < b.size() && !b.at(je).isDigit())
+                ++je;
+            if (const int order = collator.compare(a.mid(i, ie - i), b.mid(j, je - j)))
+                return order;
+            i = ie;
+            j = je;
+        }
+        if (i < a.size() || j < b.size())
+            return i < a.size() ? 1 : -1;
+        return collator.compare(a, b);
+    };
     // Folder by folder, in natural order (2 before 10), a folder's own notes
     // before its subfolders.
-    std::sort(relative.begin(), relative.end(), [&collator](const QString &a, const QString &b) {
+    std::sort(relative.begin(), relative.end(), [&natural](const QString &a, const QString &b) {
         const QStringList ap = a.split(QLatin1Char('/'));
         const QStringList bp = b.split(QLatin1Char('/'));
         for (int i = 0;; ++i) {
@@ -580,7 +622,7 @@ QStringList notesUnder(const QString &folder) {
             const bool bFile = i == bp.size() - 1;
             if (aFile != bFile)
                 return aFile;
-            const int order = collator.compare(ap.at(i), bp.at(i));
+            const int order = natural(ap.at(i), bp.at(i));
             if (order != 0)
                 return order < 0;
             if (aFile)
