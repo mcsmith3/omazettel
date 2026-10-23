@@ -1,0 +1,5 @@
+kind = "app"
+name = "OmaZettel"
+categories = ["Office", "TextEditor"]
+icon = "pkgbuild/omazettel.svg"
+screenshots = ["docs/screenshots/notes.png", "docs/screenshots/search.png", "docs/screenshots/export.png", "docs/screenshots/themes.png"]

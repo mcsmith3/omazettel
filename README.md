@@ -117,6 +117,12 @@ sudo pacman -S --needed pandoc-cli texlive-xetex github-cli
 
 ## Install
 
+OmaStore can install OmaZettel from [its app page](omastore://mcsmith3/omazettel),
+or find it by searching for "OmaZettel" in the store. The store installs it in
+your home directory. Qt 6 and an XDG desktop portal must already be installed
+as listed in [Requirements](#requirements); optional tools are needed only for
+their corresponding features.
+
 On Omarchy or Arch Linux, paste this in a terminal (it asks for your password):
 
 ```sh
