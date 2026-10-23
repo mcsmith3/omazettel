@@ -109,6 +109,23 @@ ApplicationWindow {
             requestOpen(url);
     }
 
+    // A file named when OmaZettel was started again (`omazettel note.md`,
+    // or opening a Markdown file from the file manager) while this window
+    // was running. Like openNote(), it saves or asks about the open note
+    // first; a file that does not exist yet starts a new one there.
+    function openFromLaunch(url) {
+        if (vault.pathForUrl(url) === currentPath())
+            return;
+        if (currentPath().length > 0) {
+            backStack = backStack.concat([backend.fileUrl]).slice(-100);
+            forwardStack = [];
+        }
+        if (backend.flushAutoSave() || !backend.modified)
+            backend.openOrStartFile(url);
+        else
+            requestOpen(url);
+    }
+
     function goBack() {
         if (backStack.length === 0)
             return;

@@ -157,6 +157,11 @@ cd omazettel
 4. Type `[[` to link to another note. Ctrl+click a link to follow it.
 5. Press **Ctrl+Shift+P** for every command, and **Ctrl+,** for settings.
 
+OmaZettel keeps to one window. Starting it again, running `omazettel note.md`,
+or opening a Markdown file from the file manager brings that window to the
+front and opens the file there (saving or asking about the open note first).
+For a second window anyway, start it with `OMAZETTEL_NEW_INSTANCE=1 omazettel`.
+
 To make OmaZettel the default app for Markdown files:
 
 ```sh
