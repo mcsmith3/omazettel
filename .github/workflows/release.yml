@@ -1,4 +1,13 @@
-name: OmaStore release
+name: Release
+
+# Pull requests: build and test both architectures, publish nothing.
+# A tag omazettel-vX.Y.Z: build, test, and publish the GitHub release with
+#   - omazettel-X.Y.Z-<arch>-linux.tar.gz   for OmaStore
+#   - omazettel-X.Y.Z-1-<arch>.pkg.tar.zst  the pacman package
+#   - omazettel-<arch>.pkg.tar.zst          the same, for install.sh
+#   - checksums.txt and SHA256SUMS          checksums of all of them
+#   - a build provenance attestation        shown as verified in OmaStore
+# The notes come from docs/releases/X.Y.Z.md when it exists.
 
 on:
   pull_request:
@@ -6,7 +15,6 @@ on:
   push:
     tags:
       - 'omazettel-v*'
-      - 'v*'
 
 jobs:
   build:
@@ -22,47 +30,28 @@ jobs:
             image: menci/archlinuxarm:base-devel
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
-    env:
-      VERSION: ${{ github.ref_name }}
-      ARCH: ${{ matrix.arch }}
-      EVENT: ${{ github.event_name }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative
-      - uses: actions/checkout@v4
-      - name: Build and package
-        shell: bash
+        # pacman's download sandboxes (Landlock and seccomp) fail inside the ARM
+        # container on GitHub's runners. The official x86_64 image already turns
+        # the filesystem one off; this throwaway build container turns both off.
         run: |
-          set -euo pipefail
-          if [[ "$EVENT" == pull_request ]]; then
-            ver=0.0.0-pr
-          else
-            case "$VERSION" in
-              omazettel-v*|v*) ver="${VERSION##*v}" ;;
-              *) exit 1 ;;
-            esac
-            [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]
-          fi
-          ./bin/build
-          dir="omazettel-$ver-$ARCH-linux"
-          install -Dm755 build/omazettel "dist/$dir/bin/omazettel"
-          install -Dm644 LICENSE "dist/$dir/share/licenses/omazettel/LICENSE"
-          install -Dm644 LICENSES/MIT-omawrite.txt "dist/$dir/share/licenses/omazettel/MIT-omawrite.txt"
-          install -Dm644 THIRD-PARTY-NOTICES.md "dist/$dir/share/licenses/omazettel/THIRD-PARTY-NOTICES.md"
-          install -Dm644 README.md "dist/$dir/share/doc/omazettel/README.md"
-          install -Dm644 skills/omazettel/SKILL.md "dist/$dir/share/omazettel/skills/omazettel/SKILL.md"
-          install -Dm644 themed/omazettel.toml.tpl "dist/$dir/share/omazettel/themed/omazettel.toml.tpl"
-          install -Dm644 pkgbuild/omazettel.svg "dist/$dir/share/icons/hicolor/scalable/apps/omazettel.svg"
-          install -Dm644 pkgbuild/omazettel.desktop "dist/$dir/share/applications/omazettel.desktop"
-          tar -C dist -czf "dist/$dir.tar.gz" "$dir"
+          sed -i 's/^#DisableSandbox/DisableSandbox/' /etc/pacman.conf
+          pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono
+      - uses: actions/checkout@v4
+      - name: Build, test and package
+        env:
+          REF: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: bash bin/release-build "$REF" "$ARCH"
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
-          path: dist/*.tar.gz
+          path: dist/*
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/omazettel-v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -70,20 +59,44 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
           path: dist
           merge-multiple: true
-      - name: Checksums
-        run: cd dist && sha256sum ./*.tar.gz > checksums.txt
+      - name: Checksums and notes
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          sha256sum ./*.tar.gz > checksums.txt
+          sha256sum -- *.tar.gz *.pkg.tar.zst > SHA256SUMS
+          cat SHA256SUMS
+          version="${TAG#omazettel-v}"
+          echo "name=OmaZettel $version" >> "$GITHUB_OUTPUT"
+          if [ -f "../docs/releases/$version.md" ]; then
+            cp "../docs/releases/$version.md" ../release-notes.md
+            echo "generate=false" >> "$GITHUB_OUTPUT"
+          else
+            : > ../release-notes.md
+            echo "generate=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/*.tar.gz
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.pkg.tar.zst
       - uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          name: ${{ steps.notes.outputs.name }}
+          body_path: release-notes.md
+          generate_release_notes: ${{ steps.notes.outputs.generate == 'true' }}
+          make_latest: true
           fail_on_unmatched_files: true
           files: |
             dist/*.tar.gz
+            dist/*.pkg.tar.zst
             dist/checksums.txt
+            dist/SHA256SUMS

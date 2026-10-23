@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Builds, tests and packages one architecture of a release into dist/:
+#   omazettel-<ver>-<arch>-linux.tar.gz    for OmaStore (installs into your home)
+#   omazettel-<ver>-1-<arch>.pkg.tar.zst   the pacman package
+#   omazettel-<arch>.pkg.tar.zst           the same, under the name install.sh fetches
+#
+#   bin/release-build <tag or version> [arch]
+#
+# GitHub Actions runs it as root in an Arch container (see
+# .github/workflows/release.yml); the build and the tests then run as an
+# ordinary user, since makepkg refuses root and some tests need file
+# permissions to mean something. "pr" as the version builds without the
+# version checks.
+set -euo pipefail
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+ref="${1:?usage: bin/release-build <tag or version> [arch]}"
+arch="${2:-$(uname -m)}"
+
+if [[ $ref == pr ]]; then
+  ver=0.0.0
+else
+  ver="${ref#omazettel-}"
+  ver="${ver#v}"
+  [[ $ver =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Not a release version: $ref" >&2; exit 1; }
+  # The tag, the app and the package must all say the same version.
+  app="$(sed -n 's/^#define OMAZETTEL_VERSION "\(.*\)"/\1/p' src/main.cpp)"
+  pkg="$(sed -n 's/^pkgver=//p' pkgbuild/PKGBUILD)"
+  if [[ $app != "$ver" || $pkg != "$ver" ]]; then
+    echo "Version mismatch: tag $ver, src/main.cpp $app, pkgbuild/PKGBUILD $pkg" >&2
+    exit 1
+  fi
+fi
+
+# As root (in CI), do the work as an ordinary user.
+if [[ $EUID -eq 0 ]]; then
+  id builder >/dev/null 2>&1 || useradd -m builder
+  chown -R builder: "$ROOT"
+  exec runuser -u builder -- env HOME=/home/builder "$0" "$@"
+fi
+
+jobs="$(nproc 2>/dev/null || echo 2)"
+run_tests() {
+  local dir="$1" pro="$2" binary="$3"
+  mkdir -p "$dir"
+  (cd "$dir" && qmake6 "$ROOT/$pro" >/dev/null && make -j"$jobs" >/dev/null)
+  echo "Running $binary"
+  local status=0
+  (cd "$dir" && QT_QPA_PLATFORM=offscreen "./$binary" >"$ROOT/$dir/results.txt" 2>&1) || status=$?
+  grep -E '^(FAIL!|   Loc:|Totals)' "$dir/results.txt" || true
+  [[ $status -eq 0 ]] || { echo "$binary failed" >&2; exit 1; }
+}
+
+./bin/build
+run_tests build-tests-notes tests/notes/notes.pro tst_notes
+run_tests build-tests-upstream tests/tests.pro tst_omazettel
+
+rm -rf dist
+dir="omazettel-$ver-$arch-linux"
+install -Dm755 build/omazettel "dist/$dir/bin/omazettel"
+install -Dm644 LICENSE "dist/$dir/share/licenses/omazettel/LICENSE"
+install -Dm644 LICENSES/MIT-omawrite.txt "dist/$dir/share/licenses/omazettel/MIT-omawrite.txt"
+install -Dm644 THIRD-PARTY-NOTICES.md "dist/$dir/share/licenses/omazettel/THIRD-PARTY-NOTICES.md"
+install -Dm644 README.md "dist/$dir/share/doc/omazettel/README.md"
+install -Dm644 skills/omazettel/SKILL.md "dist/$dir/share/omazettel/skills/omazettel/SKILL.md"
+install -Dm644 themed/omazettel.toml.tpl "dist/$dir/share/omazettel/themed/omazettel.toml.tpl"
+install -Dm644 pkgbuild/omazettel.svg "dist/$dir/share/icons/hicolor/scalable/apps/omazettel.svg"
+install -Dm644 pkgbuild/omazettel.desktop "dist/$dir/share/applications/omazettel.desktop"
+tar -C dist -czf "dist/$dir.tar.gz" "$dir"
+rm -rf "dist/${dir:?}"
+
+if [[ $ref != pr ]]; then
+  (cd pkgbuild && PKGDEST="$ROOT/dist" CARCH="$arch" makepkg -f --noconfirm --nodeps)
+  rel="$(sed -n 's/^pkgrel=//p' pkgbuild/PKGBUILD)"
+  cp "dist/omazettel-$ver-$rel-$arch.pkg.tar.zst" "dist/omazettel-$arch.pkg.tar.zst"
+fi
+ls -l dist
