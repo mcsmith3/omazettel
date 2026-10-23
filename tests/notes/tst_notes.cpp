@@ -9,6 +9,8 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QtConcurrent>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -24,6 +26,7 @@
 #include "exporter.h"
 #include "noteindex.h"
 #include "notestree.h"
+#include "singleinstance.h"
 #include "notetemplates.h"
 #include "sync.h"
 #include "textdiff.h"
@@ -322,6 +325,63 @@ private slots:
         QVERIFY(NotesTree::naturalCompare(QStringLiteral("note 2"), QStringLiteral("Note 10")) < 0);
         QVERIFY(NotesTree::naturalCompare(QStringLiteral("a"), QStringLiteral("B")) < 0);
         QCOMPARE(NotesTree::naturalCompare(QStringLiteral("x07"), QStringLiteral("x7")), 0);
+    }
+
+    void handsALaterStartToTheRunningWindow() {
+        // A socket name of this test's own, away from a real OmaZettel.
+        qputenv("OMAZETTEL_INSTANCE_NAME", QStringLiteral("omazettel-test-%1").arg(QCoreApplication::applicationPid()).toUtf8());
+        const auto restore = qScopeGuard([]() { qunsetenv("OMAZETTEL_INSTANCE_NAME"); });
+
+        // Nothing running yet: the start goes ahead on its own.
+        QVERIFY(!SingleInstance::forwardToRunning({QStringLiteral("/tmp/x.md")}, 400));
+
+        SingleInstance running;
+        QVERIFY(running.listen());
+        QSignalSpy asked(&running, &SingleInstance::openRequested);
+        // A second one cannot take over while the first answers.
+        SingleInstance second;
+        QVERIFY(!second.listen());
+
+        // A later start hands over its file (from another thread here, as it
+        // would come from another process) and is told to exit.
+        QFuture<bool> forwarded = QtConcurrent::run([]() {
+            return SingleInstance::forwardToRunning({QStringLiteral("/notes/Plan.md")});
+        });
+        QTRY_COMPARE(asked.count(), 1);
+        QCOMPARE(asked.first().at(0).toStringList(), QStringList{QStringLiteral("/notes/Plan.md")});
+        QTRY_VERIFY(forwarded.isFinished());
+        QVERIFY(forwarded.result());
+
+        // With no file it only asks to come to the front.
+        forwarded = QtConcurrent::run([]() { return SingleInstance::forwardToRunning({}); });
+        QTRY_COMPARE(asked.count(), 2);
+        QVERIFY(asked.at(1).at(0).toStringList().isEmpty());
+        QTRY_VERIFY(forwarded.isFinished());
+    }
+
+    void opensAFileFromALaterStart() {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("One.md")), "# One\n");
+        writeFile(dir.filePath(QStringLiteral("Two.md")), "# Two\n");
+        Backend backend;
+        Vault vault;
+        QVERIFY(vault.openFolder(dir.path()));
+        QQmlEngine engine;
+        QScopedPointer<QObject> window(loadMain(engine, backend, vault));
+        backend.open(QUrl::fromLocalFile(dir.filePath(QStringLiteral("One.md"))));
+
+        QMetaObject::invokeMethod(window.get(), "openFromLaunch",
+                                  Q_ARG(QVariant, QUrl::fromLocalFile(dir.filePath(QStringLiteral("Two.md")))));
+        QCOMPARE(backend.fileUrl(), QUrl::fromLocalFile(dir.filePath(QStringLiteral("Two.md"))));
+        // Back returns to the note that was open.
+        QMetaObject::invokeMethod(window.get(), "goBack");
+        QCOMPARE(backend.fileUrl(), QUrl::fromLocalFile(dir.filePath(QStringLiteral("One.md"))));
+
+        // A file that does not exist yet starts a new note there.
+        const QString fresh = dir.filePath(QStringLiteral("Fresh.md"));
+        QMetaObject::invokeMethod(window.get(), "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(fresh)));
+        QCOMPARE(backend.fileUrl(), QUrl::fromLocalFile(fresh));
+        QVERIFY(!QFile::exists(fresh));
     }
 
     // ── Backend additions ───────────────────────────────────────────────────

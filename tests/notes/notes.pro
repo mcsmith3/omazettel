@@ -24,6 +24,7 @@ SOURCES += \
     ../../src/textdiff.cpp \
     ../../src/zettel.cpp \
     ../../src/notestree.cpp \
+    ../../src/singleinstance.cpp \
     ../../src/vault.cpp
 HEADERS += \
     ../../src/cli.h \
@@ -42,9 +43,10 @@ HEADERS += \
     ../../src/textdiff.h \
     ../../src/zettel.h \
     ../../src/notestree.h \
+    ../../src/singleinstance.h \
     ../../src/vault.h
 
-QT += widgets printsupport quickcontrols2 quickdialogs2 dbus
+QT += widgets printsupport quickcontrols2 quickdialogs2 dbus network
 
 # The app's bundled files (the built-in theme template).
 RESOURCES += ../../src/resources.qrc

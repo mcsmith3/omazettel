@@ -1,4 +1,4 @@
-QT += core gui concurrent widgets printsupport qml quick quickcontrols2 quickdialogs2 dbus
+QT += core gui concurrent widgets printsupport qml quick quickcontrols2 quickdialogs2 dbus network
 
 CONFIG += c++17 exceptions release
 TARGET = omazettel
@@ -21,6 +21,7 @@ HEADERS += \
     src/textdiff.h \
     src/systemtheme.h \
     src/notestree.h \
+    src/singleinstance.h \
     src/vault.h \
     src/zettel.h
 
@@ -44,6 +45,7 @@ SOURCES += \
     src/textdiff.cpp \
     src/systemtheme.cpp \
     src/notestree.cpp \
+    src/singleinstance.cpp \
     src/vault.cpp \
     src/zettel.cpp
 

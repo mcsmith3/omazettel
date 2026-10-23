@@ -11,6 +11,12 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QSettings>
+#include <QFileInfo>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QTimer>
+
+#include <unistd.h>
 
 #include "backend.h"
 #include "cli.h"
@@ -19,6 +25,7 @@
 #include "exporter.h"
 #include "noteindex.h"
 #include "notetemplates.h"
+#include "singleinstance.h"
 #include "sync.h"
 #include "vault.h"
 
@@ -44,6 +51,21 @@ int main(int argc, char *argv[]) {
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omazettel")));
 
     app.setOrganizationName(QStringLiteral("omazettel"));
+
+    // One window per user: a second start hands its file to the first and
+    // exits. OMAZETTEL_NEW_INSTANCE=1 opens another window anyway.
+    QStringList launchFiles;
+    if (app.arguments().size() > 1)
+        launchFiles.append(QFileInfo(app.arguments().at(1)).absoluteFilePath());
+    const bool separate = qEnvironmentVariableIntValue("OMAZETTEL_NEW_INSTANCE") == 1;
+    SingleInstance instance(&app);
+    if (!separate) {
+        if (SingleInstance::forwardToRunning(launchFiles))
+            return 0;
+        // Another start may have claimed it a moment ago.
+        if (!instance.listen() && SingleInstance::forwardToRunning(launchFiles))
+            return 0;
+    }
 
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
@@ -148,9 +170,44 @@ int main(int argc, char *argv[]) {
 
     backend.setParentWindow(qobject_cast<QWindow *>(engine.rootObjects().constFirst()));
 
-    const QStringList args = app.arguments();
-    if (args.size() > 1)
-        backend.openOrStartFile(QUrl::fromLocalFile(args.at(1)));
+    // A later start of OmaZettel: come to the front, and open its file the
+    // way opening a note from the sidebar does (saving or asking first).
+    QObject *window = engine.rootObjects().constFirst();
+    QObject::connect(&instance, &SingleInstance::openRequested, window,
+                     [window](const QStringList &files, const QString &activationToken) {
+        if (auto *quickWindow = qobject_cast<QWindow *>(window)) {
+            // Wayland lets a window take focus with the token the desktop
+            // gave the start that asked.
+            if (!activationToken.isEmpty())
+                qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
+            quickWindow->show();
+            quickWindow->raise();
+            quickWindow->requestActivate();
+        }
+        // Hyprland (Omarchy) keeps focus where it is without a token, so ask
+        // it directly.
+        if (!qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")) {
+            const QString hyprctl = QStandardPaths::findExecutable(QStringLiteral("hyprctl"));
+            if (!hyprctl.isEmpty()) {
+                // Hyprland's Lua dispatcher first, as Omarchy's own scripts
+                // do; the older "focuswindow" form for older Hyprland.
+                const QString target = QStringLiteral("pid:%1").arg(getpid());
+                auto *focus = new QProcess(window);
+                QObject::connect(focus, &QProcess::finished, focus, [focus, hyprctl, target](int code) {
+                    if (code != 0)
+                        QProcess::startDetached(hyprctl, {QStringLiteral("dispatch"), QStringLiteral("focuswindow"), target});
+                    focus->deleteLater();
+                });
+                focus->start(hyprctl, {QStringLiteral("dispatch"),
+                                       QStringLiteral("hl.dsp.focus({ window = \"%1\" })").arg(target)});
+            }
+        }
+        if (!files.isEmpty())
+            QMetaObject::invokeMethod(window, "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(files.first())));
+    });
+
+    if (!launchFiles.isEmpty())
+        backend.openOrStartFile(QUrl::fromLocalFile(launchFiles.first()));
     else if (const QString lastNote = vault.lastNotePath(); !lastNote.isEmpty())
         backend.open(QUrl::fromLocalFile(lastNote));
 
