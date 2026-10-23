@@ -23,6 +23,7 @@
 #include "transcriber.h"
 #include "exporter.h"
 #include "noteindex.h"
+#include "notestree.h"
 #include "notetemplates.h"
 #include "sync.h"
 #include "textdiff.h"
@@ -265,6 +266,62 @@ private slots:
             names << vault.displayName(model->index(row, 0, vault.rootIndex()));
         names.sort();
         QCOMPARE(names, (QStringList{QStringLiteral("Sub"), QStringLiteral("a")}));
+    }
+
+    void showsTheWholeTreeAtOnce() {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("10 Ten.md")), "x");
+        writeFile(dir.filePath(QStringLiteral("2 Two.md")), "x");
+        writeFile(dir.filePath(QStringLiteral("b.md")), "x");
+        writeFile(dir.filePath(QStringLiteral("Zed/Deep/inner.md")), "x");
+        writeFile(dir.filePath(QStringLiteral("Alpha/note.markdown")), "x");
+        writeFile(dir.filePath(QStringLiteral("Alpha/skip.pdf")), "x");
+        writeFile(dir.filePath(QStringLiteral(".omazettel/templates/t.md")), "x");
+        QDir().mkpath(dir.filePath(QStringLiteral("Empty")));
+
+        Vault vault;
+        QVERIFY(vault.openFolder(dir.path()));
+        QAbstractItemModel *model = vault.model();
+        // Every level is there the moment the folder opens: no waiting, no
+        // folder that fills in later.
+        const auto tree = [&]() {
+            QStringList lines;
+            std::function<void(const QModelIndex &, int)> walk = [&](const QModelIndex &parent, int depth) {
+                for (int row = 0; row < model->rowCount(parent); ++row) {
+                    const QModelIndex index = model->index(row, 0, parent);
+                    lines << QString(depth * 2, QLatin1Char(' ')) + index.data(NotesTree::FileNameRole).toString();
+                    walk(index, depth + 1);
+                }
+            };
+            walk(QModelIndex(), 0);
+            return lines;
+        };
+        const QStringList expected{QStringLiteral("Alpha"), QStringLiteral("  note.markdown"), QStringLiteral("Empty"),
+                                   QStringLiteral("Zed"), QStringLiteral("  Deep"), QStringLiteral("    inner.md"),
+                                   QStringLiteral("2 Two.md"), QStringLiteral("10 Ten.md"), QStringLiteral("b.md")};
+        QCOMPARE(tree(), expected);
+        // The same again when it opens again.
+        Vault again;
+        QVERIFY(again.openFolder(dir.path()));
+        QCOMPARE(again.model()->rowCount(again.rootIndex()), 6);
+
+        // A note the app makes is in the tree at once, ready to reveal.
+        const QString made = vault.createNote(dir.filePath(QStringLiteral("Zed/Deep")), QStringLiteral("Fresh"));
+        QVERIFY(vault.indexForPath(made).isValid());
+        // A note made by something else (sync, the command line) shows up
+        // shortly, and the rows around it stay the same objects.
+        const QPersistentModelIndex alpha = vault.indexForPath(dir.filePath(QStringLiteral("Alpha")));
+        writeFile(dir.filePath(QStringLiteral("Alpha/from-sync.md")), "x");
+        QTRY_VERIFY(vault.indexForPath(dir.filePath(QStringLiteral("Alpha/from-sync.md"))).isValid());
+        QVERIFY(alpha.isValid());
+        QCOMPARE(alpha.data(NotesTree::FileNameRole).toString(), QStringLiteral("Alpha"));
+        QVERIFY(QFile::remove(dir.filePath(QStringLiteral("b.md"))));
+        QTRY_VERIFY(!vault.indexForPath(dir.filePath(QStringLiteral("b.md"))).isValid());
+        QVERIFY(alpha.isValid());
+
+        QVERIFY(NotesTree::naturalCompare(QStringLiteral("note 2"), QStringLiteral("Note 10")) < 0);
+        QVERIFY(NotesTree::naturalCompare(QStringLiteral("a"), QStringLiteral("B")) < 0);
+        QCOMPARE(NotesTree::naturalCompare(QStringLiteral("x07"), QStringLiteral("x7")), 0);
     }
 
     // ── Backend additions ───────────────────────────────────────────────────

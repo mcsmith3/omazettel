@@ -1,11 +1,12 @@
 #pragma once
 
-#include <QFileSystemModel>
 #include <QModelIndex>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+
+class NotesTree;
 
 // The notes folder ("vault"): which folder is open, the folders opened
 // before, the Markdown file tree shown in the sidebar, and creating, renaming
@@ -35,7 +36,7 @@ public:
     QString rootPath() const { return m_rootPath; }
     QString rootName() const;
     QModelIndex rootIndex() const;
-    QAbstractItemModel *model() const { return m_model; }
+    QAbstractItemModel *model() const;
     QStringList recentFolders() const { return m_recentFolders; }
     bool sidebarVisible() const { return m_sidebarVisible; }
     void setSidebarVisible(bool visible);
@@ -113,7 +114,7 @@ private:
     void addRecent(const QString &path);
     QString insideOrEmpty(const QString &path) const;
 
-    QFileSystemModel *m_model = nullptr;
+    NotesTree *m_model = nullptr;
     QString m_rootPath;
     QStringList m_recentFolders;
     bool m_sidebarVisible = true;

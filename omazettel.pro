@@ -20,6 +20,7 @@ HEADERS += \
     src/sync.h \
     src/textdiff.h \
     src/systemtheme.h \
+    src/notestree.h \
     src/vault.h \
     src/zettel.h
 
@@ -42,6 +43,7 @@ SOURCES += \
     src/sync.cpp \
     src/textdiff.cpp \
     src/systemtheme.cpp \
+    src/notestree.cpp \
     src/vault.cpp \
     src/zettel.cpp
 
