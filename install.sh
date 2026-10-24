@@ -35,7 +35,50 @@ if [[ -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; then
   TTY=/dev/tty
   CONFIRM=()
 fi
-STALE="pacman did not install it. If it could not satisfy a dependency on qt6, update the system (sudo pacman -Syu) and run this again"
+
+# Installing needs sudo. Ask for the password up front, so a wrong password or
+# an account without sudo gets its own message instead of looking like a
+# pacman problem.
+# With "terminal-only", it only checks there is somewhere to type the
+# password: makepkg runs sudo -k, which asks again anyway.
+get_sudo() {
+  sudo -n true 2>/dev/null && return 0
+  if [[ $TTY != /dev/tty ]]; then
+    die "installing needs your sudo password, and there is no terminal to ask for it in.
+  Run the install line in a terminal. Nothing was installed."
+  fi
+  [[ ${1:-} == terminal-only ]] && return 0
+  info "Installing needs your password (for sudo)"
+  sudo -v <"$TTY" || die "sudo did not accept the password, or this account is not allowed to use sudo.
+  Nothing was installed. Run the line again and enter your login password."
+}
+
+# Says why pacman (or makepkg) stopped, from the errors it printed to $1.
+explain_failure() {
+  local log="$1" what="$2"
+  if grep -qiE "incorrect password|not in the sudoers|not allowed to run sudo|a password is required" "$log"; then
+    die "sudo did not accept the password, or this account is not allowed to use sudo.
+  Nothing was installed. Run the line again and enter your login password."
+  elif grep -qiE "could not satisfy dependencies|unable to satisfy dependency|requires qt6|target not found: qt6" "$log"; then
+    die "pacman could not install a library OmaZettel needs (usually a newer Qt 6).
+  Update the system with: sudo pacman -Syu
+  then run the install line again. Nothing was installed."
+  elif grep -qi "unable to lock database" "$log"; then
+    die "another package manager is running (pacman's database is locked).
+  Wait for it to finish (or close it) and run the install line again.
+  If nothing else is running, a crash may have left the lock: sudo rm /var/lib/pacman/db.lck"
+  elif grep -qiE "exists in filesystem|conflicting files" "$log"; then
+    die "files OmaZettel installs are already on this system, from another package (pacman lists them above).
+  Find their owner with: pacman -Qo <file>, remove that package, and run the install line again. Nothing was installed."
+  elif [[ $what == build ]] && grep -qE "==> ERROR: A failure occurred in (build|package)" "$log"; then
+    die "building OmaZettel failed (see the compiler's messages above). Nothing was installed.
+  Please report it, with that output, at https://github.com/$REPO/issues"
+  elif ! grep -qi "error" "$log"; then
+    die "pacman stopped without installing it (if you answered no, nothing changed)."
+  else
+    die "pacman did not install it; its message is above. Nothing was installed."
+  fi
+}
 
 ARCH="$(uname -m)"
 PACKAGE="omazettel-$ARCH.pkg.tar.zst"
@@ -61,8 +104,11 @@ build_from_source() {
   command -v makepkg >/dev/null || die "building needs makepkg: sudo pacman -S base-devel"
   git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$tag" "https://github.com/$REPO.git" "$TMP/omazettel" \
     || die "could not download the source of $tag"
-  # makepkg -s installs Qt and the compiler first if they are missing.
-  (cd "$TMP/omazettel/pkgbuild" && makepkg -sfi "${CONFIRM[@]}" <"$TTY") || die "$STALE"
+  get_sudo terminal-only
+  # makepkg -s installs Qt and the compiler first if they are missing. Its
+  # errors go to the terminal as usual and to a log that explains them.
+  (cd "$TMP/omazettel/pkgbuild" && makepkg -sfi "${CONFIRM[@]}" <"$TTY" 2> >(tee "$TMP/errors.log" >&2)) \
+    || { sleep 0.2; explain_failure "$TMP/errors.log" build; }
 }
 
 printf '\e[1m%s\e[0m\n' "Installing OmaZettel (${REF:-latest release}, $ARCH)"
@@ -76,8 +122,10 @@ elif curl -fsSL -o "$TMP/$PACKAGE" "$BASE/$PACKAGE" 2>/dev/null; then
   info "Checking it"
   (cd "$TMP" && grep " $PACKAGE\$" SHA256SUMS | sha256sum --check --quiet --strict) \
     || die "$PACKAGE is not what SHA256SUMS says it should be; nothing was installed"
+  get_sudo
   info "Installing it with pacman"
-  sudo pacman -U "${CONFIRM[@]}" "$TMP/$PACKAGE" <"$TTY" || die "$STALE"
+  sudo pacman -U "${CONFIRM[@]}" "$TMP/$PACKAGE" <"$TTY" 2> >(tee "$TMP/errors.log" >&2) \
+    || { sleep 0.2; explain_failure "$TMP/errors.log" install; }
 else
   info "There is no ready-made package for $ARCH in this release"
   build_from_source
