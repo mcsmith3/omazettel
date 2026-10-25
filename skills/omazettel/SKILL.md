@@ -39,6 +39,7 @@ omazettel tasks [--status open|done|all] [--note N] [--folder F] [--tag T]
 omazettel tags | links                            # tag counts; broken links and orphans
 omazettel rename <note|folder> <new name>         # rewrites [[links]]
 omazettel tidy-names [folder] [--apply]           # spaces in file names -> separator; preview first
+omazettel setup-layout [--apply]                  # older folder -> numbered layout; preview first
 omazettel move <note|folder> <folder>
 omazettel trash <note>
 omazettel export <note|folder> [-p PDF|Word|HTML|...] [-o file]
@@ -57,6 +58,11 @@ leaves `$`, backticks and `!` alone.
 
 ## Ground rules
 
+- **Read the person's rules first.** Run `omazettel info --json` once at the
+  start. When `layout.numbered` is true, `layout.rules.text`
+  (`01-system/SYSTEM-RULES.md`) and `layout.howIWork.text`
+  (`01-system/HOW-I-WORK.md`) are the person's own instructions for agents;
+  follow them over the defaults here. Don't edit either file unless asked.
 - **Look before you write.** `search` or `list` to find the note, `show` to
   read it, and match its headings and style.
 - **Change the part, not the whole.** `append` (to the end, or under a
@@ -68,6 +74,29 @@ leaves `$`, backticks and `!` alone.
   exist. Answers list any `linkedNotesCreated`; mention them.
 - **Tasks** are `- [ ] Owner: task (due)`; `tasks` finds them across notes.
 - Report the note's `path` back to the person, and the action items you wrote.
+
+## Where notes go
+
+A notes folder with the numbered layout (`layout.numbered` in `info`):
+
+| Folder | What goes there |
+| --- | --- |
+| `01-system/` | The rules and how-I-work files. Read them; leave them alone |
+| `02-context/` | Stable background and reference: people, clients, glossaries; literature notes in `02-context/literature` |
+| `03-projects/<project>/` | Active work, one folder per project, starting with a `00-brief` note (goal, people, deadline). Daily notes are in `03-projects/daily`, meetings in `03-projects/meetings` |
+| `04-outputs/` | Finished work, ready to send |
+| `99-archive/` | Finished or dropped projects: `move` them here rather than `trash` |
+
+Name files so they say when, what and how far along: date first for anything
+tied to a day (`2026-10-25-vendor-kickoff`), a status at the end for drafts
+and outputs (`2026-10-25-q4-plan-draft-v1`, then `...-final` in `04-outputs`),
+and plain topic names for lasting ideas (`zettelkasten-method`). Avoid
+`notes`, `final` or `untitled`. The templates already date daily and meeting
+notes; pass `-f 03-projects/<project>` to file a meeting under its project.
+
+Without the layout, follow the folders that are there. Suggest
+`omazettel setup-layout` (it previews first) only when the person asks how to
+organise their notes.
 
 ## A meeting note from a recording or transcript
 
@@ -117,7 +146,8 @@ EOF
 
 A list value becomes bullets; a string goes in as written. Headings the
 template lacks are added. The Meeting template names the file
-`<date> <title>` in `Meetings/`; `-f` puts it elsewhere. Keep the summary
+`<date>-<title>` in its meetings folder (`03-projects/meetings` with the
+layout, else `Meetings/`); `-f` puts it elsewhere. Keep the summary
 faithful to the transcript: no invented decisions, owners or dates.
 Whisper does not know who spoke; with a recording, leave owners out or ask.
 
@@ -138,8 +168,8 @@ note (from the Note template) if there is none. To change a header field:
 
 ## Daily notes and capture
 
-`daily` returns today's daily note (made from the Daily template in `Daily/`
-if needed); `daily yesterday`, `daily 2026-10-01` or `daily -3` for others.
+`daily` returns today's daily note (made from the Daily template in
+`03-projects/daily/`, or `Daily/` without the layout, if needed); `daily yesterday`, `daily 2026-10-01` or `daily -3` for others.
 `daily --append "..." -s Focus` adds to a heading (default Log).
 `capture "text"` adds `- HH:MM text` under Log in today's note;
 `capture --task "text"` adds `- [ ] text`.
@@ -154,7 +184,8 @@ open them (`omazettel <path>` opens one in the app).
 
 `rename` and `move` rewrite every `[[link]]` to what moved, as the app does;
 never move notes with `mv`. `tidy-names` renames notes with spaces in their
-file names; run it without `--apply` first and show the person the list. `export <note> -p PDF` uses the folder's pandoc
+file names, and `setup-layout` moves an older folder to the numbered layout;
+run either without `--apply` first and show the person the list. `export <note> -p PDF` uses the folder's pandoc
 export profiles (`info` lists them) and answers with `output`, the file
 written; exporting a folder makes one document of its notes. `sync` saves a
 version and pulls and pushes when git sync is set up; `sync --status` only

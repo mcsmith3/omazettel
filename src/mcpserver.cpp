@@ -1,5 +1,6 @@
 #include "mcpserver.h"
 
+#include "layout.h"
 #include "notesapi.h"
 
 #include <QJsonArray>
@@ -34,8 +35,12 @@ QString instructions(const NotesApi &api) {
         "For a meeting recording or transcript: transcribe it, then create_note with template Meeting, "
         "filling sections (Agenda, Notes, Decisions, Action items as - [ ] tasks) and meta.attendees. "
         "Link related notes with [[Note name]]; each link to a note that does not exist makes an empty "
-        "one unless linkNotes is false, so link only notes that exist or should.")
-        .arg(api.root());
+        "one unless linkNotes is false, so link only notes that exist or should.%2")
+        .arg(api.root(), Layout::present(api.root())
+                             ? QStringLiteral("\n\nBefore changing notes, read 01-system/SYSTEM-RULES.md and "
+                                              "01-system/HOW-I-WORK.md (vault_info returns both) and follow them. ")
+                                   + Layout::guide()
+                             : QString());
 }
 
 QJsonArray toolList() {

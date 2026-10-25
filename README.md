@@ -25,6 +25,7 @@ endorsed by Omacom or the Omarchy project.
 - [Install](#install)
 - [Getting started](#getting-started)
 - [Writing](#writing)
+- [Folder layout](#folder-layout)
 - [Links, backlinks and tags](#links-backlinks-and-tags)
 - [Note templates](#note-templates)
 - [Search and outline](#search-and-outline)
@@ -186,6 +187,46 @@ xdg-mime default omazettel.desktop text/markdown text/x-markdown
   `omarchy display text size`, and Ctrl+= / Ctrl+- / Ctrl+scroll change it on
   top of that.
 
+## Folder layout
+
+A new, empty notes folder starts with a numbered layout, so you and AI agents
+find things in the same places:
+
+```
+01-system/      SYSTEM-RULES.md (rules agents follow) and HOW-I-WORK.md (about you)
+02-context/     stable background and reference; literature notes in 02-context/literature
+03-projects/    active work, one folder per project; daily/ and meetings/ live here
+04-outputs/     finished work
+99-archive/     old material, still searched
+```
+
+The numbers set the reading order: rules first, then context, the work, and
+the results. 99 keeps the archive at the end. Agents using the
+`omazettel` command or the MCP server are told to read the two `01-system`
+files before changing anything (`omazettel info` returns both), so put your
+own rules and background there. OmaZettel writes starter versions once and
+never changes them after that.
+
+File names say when, what and how far along. Anything tied to a day starts with
+the date (`2026-10-25-kickoff`; the Daily and Meeting templates do this),
+drafts and outputs end with their status (`2026-10-25-q4-plan-final`), and
+lasting ideas keep plain topic names so links read well.
+
+A notes folder that already has notes keeps its own folders. To move it to
+the layout:
+
+```sh
+omazettel setup-layout            # shows what would change, changes nothing
+omazettel setup-layout --apply    # does it
+```
+
+This moves `Daily`, `Meetings`, `Literature` and `Archive` into the layout,
+points the templates there and rewrites links to match. It adds what's
+missing and never overwrites a file. Other folders stay where they are, and
+it lists them; move each one with `omazettel move <folder> 02-context` (or
+`03-projects`). Empty layout folders hold a hidden `.keep` file, so sync keeps
+them on every computer.
+
 ## Links, backlinks and tags
 
 - **Link** with `[[Note name]]`, `[[folder/Note]]`, `[[Note#Heading]]`,
@@ -222,7 +263,7 @@ folder; OmaZettel adds **Note** (a Zettelkasten note with an ID), **Meeting**,
 Edit note templates, or add your own. Each starts with a pandoc YAML header:
 
 ```markdown
-<!-- omazettel: name="{{date}} {{title}}" folder="Meetings" -->
+<!-- omazettel: name="{{date}} {{title}}" folder="03-projects/meetings" -->
 ---
 title: "{{title}}"
 author: "{{author}}"
@@ -387,18 +428,20 @@ omazettel daily yesterday                         # or a date, or -3
 omazettel tasks                                   # open - [ ] tasks in every note
 omazettel rename "Atlas" "Atlas Program"          # and every [[link]] to it
 omazettel tidy-names [--apply]                    # rename old "file names with spaces"
+omazettel setup-layout [--apply]                  # move an older folder to the numbered layout
 omazettel export Meetings -p Word                 # a folder as one document
 omazettel sync
 ```
 
 | Command | What it does |
 | --- | --- |
-| `info` | The notes folder, templates, export profiles, sync and transcription status |
+| `info` | The notes folder, templates, export profiles, sync and transcription status, and the folder layout with your `01-system` rules for agents |
 | `list`, `search`, `show`, `tags`, `tasks`, `links` | Find and read: by folder, tag or date; full text; one note with its links and backlinks; tags; open tasks; broken links and orphans |
 | `new`, `append`, `set-section`, `set-meta`, `write` | Write: a note from a template (filling its sections and header), add under a heading, replace a section, change header fields, replace a note |
 | `daily`, `capture` | A day's daily note; a quick timestamped line or task in today's |
 | `rename`, `move`, `trash` | Organise, rewriting links as the app does |
 | `tidy-names` | Renames older notes with spaces in their file names to the current separator, rewriting links; previews unless `--apply` |
+| `setup-layout` | Gives the notes folder the [numbered layout](#folder-layout), moving the older Daily, Meetings, Literature and Archive folders in; previews unless `--apply` |
 | `export`, `sync` | Pandoc export with your profiles; git sync |
 | `transcribe` | Meeting captions (Teams, Zoom, Meet `.vtt`/`.srt`) as `Speaker: words`; `.docx` and `.txt` transcripts; recordings through Voxtype or whisper.cpp. With `--note`, an AI writes the meeting note |
 | `ai` | Which AI writes notes, whether it and transcription are ready, and how to fix them; `--set` chooses |

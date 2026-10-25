@@ -1,5 +1,6 @@
 #include "notetemplates.h"
 
+#include "layout.h"
 #include "vault.h"
 
 #include <QDir>
@@ -71,7 +72,10 @@ void NoteTemplates::setRoot(const QString &notesRoot) {
     reload();
 }
 
-QList<QPair<QString, QString>> NoteTemplates::starterTemplates() {
+QList<QPair<QString, QString>> NoteTemplates::starterTemplates(const QString &notesRoot) {
+    const QString meetings = Layout::meetingsFolder(notesRoot);
+    const QString daily = Layout::dailyFolder(notesRoot);
+    const QString literature = Layout::literatureFolder(notesRoot);
     return {
         {QStringLiteral("Note"),
          QStringLiteral(
@@ -86,7 +90,7 @@ QList<QPair<QString, QString>> NoteTemplates::starterTemplates() {
              "{{cursor}}\n")},
         {QStringLiteral("Meeting"),
          QStringLiteral(
-             "<!-- omazettel: name=\"{{date}} {{title}}\" folder=\"Meetings\" -->\n"
+             "<!-- omazettel: name=\"{{date}} {{title}}\" folder=\"%1\" -->\n"
              "---\n"
              "title: \"{{title}}\"\n"
              "subtitle: \"Meeting notes\"\n"
@@ -109,10 +113,10 @@ QList<QPair<QString, QString>> NoteTemplates::starterTemplates() {
              "\n"
              "## Action items\n"
              "\n"
-             "- [ ] \n")},
+             "- [ ] \n").arg(meetings)},
         {QStringLiteral("Daily"),
          QStringLiteral(
-             "<!-- omazettel: name=\"{{date}}\" folder=\"Daily\" existing=\"open\" -->\n"
+             "<!-- omazettel: name=\"{{date}}\" folder=\"%1\" existing=\"open\" -->\n"
              "---\n"
              "title: \"{{date:dddd d MMMM yyyy}}\"\n"
              "author: \"{{author}}\"\n"
@@ -126,10 +130,10 @@ QList<QPair<QString, QString>> NoteTemplates::starterTemplates() {
              "\n"
              "## Log\n"
              "\n"
-             "## Notes\n")},
+             "## Notes\n").arg(daily)},
         {QStringLiteral("Literature note"),
          QStringLiteral(
-             "<!-- omazettel: folder=\"Literature\" -->\n"
+             "<!-- omazettel: folder=\"%1\" -->\n"
              "---\n"
              "title: \"{{title}}\"\n"
              "author: \"{{author}}\"\n"
@@ -147,7 +151,7 @@ QList<QPair<QString, QString>> NoteTemplates::starterTemplates() {
              "\n"
              "## Quotes\n"
              "\n"
-             "## Related\n")},
+             "## Related\n").arg(literature)},
     };
 }
 
@@ -155,8 +159,12 @@ void NoteTemplates::ensureDefaults() {
     const QString dir = folder();
     if (dir.isEmpty() || QFileInfo(dir).exists())
         return;
+    // A notes folder OmaZettel has never seen. If it is empty, it starts
+    // with the numbered layout; one that has notes keeps its own folders.
+    if (Layout::isEmpty(m_root))
+        Layout::create(m_root);
     QDir().mkpath(dir);
-    for (const auto &[name, text] : starterTemplates()) {
+    for (const auto &[name, text] : starterTemplates(m_root)) {
         QSaveFile file(QDir(dir).filePath(name + QStringLiteral(".md")));
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             file.write(text.toUtf8());

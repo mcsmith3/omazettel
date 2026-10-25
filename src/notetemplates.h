@@ -68,7 +68,9 @@ public:
                            const QDateTime &now);
     static QString yamlEscaped(const QString &value);
     static QString systemAuthor();
-    static QList<QPair<QString, QString>> starterTemplates();
+    // The built-in templates; their folders follow the notes folder's layout
+    // (Layout::dailyFolder and the rest).
+    static QList<QPair<QString, QString>> starterTemplates(const QString &notesRoot = QString());
 
 signals:
     void changed();

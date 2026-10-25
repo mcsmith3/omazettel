@@ -21,6 +21,7 @@
 #include "citations.h"
 #include "cli.h"
 #include "mcpserver.h"
+#include "layout.h"
 #include "notesapi.h"
 #include "transcriber.h"
 #include "exporter.h"
@@ -753,6 +754,8 @@ private slots:
         templates.setRoot(dir.path());
         templates.setAuthor(QStringLiteral("Test Author"));
         templates.ensureDefaults();
+        // An empty folder starts with the numbered layout.
+        QVERIFY(Layout::present(dir.path()));
         QCOMPARE(templates.list().size(), 4);
         QVERIFY(templates.needsTitle(QStringLiteral("Meeting")));
         QVERIFY(!templates.needsTitle(QStringLiteral("Daily")));
@@ -765,7 +768,7 @@ private slots:
         const QString today = QDate::currentDate().toString(Qt::ISODate);
         const QVariantMap meeting = templates.create(QStringLiteral("Meeting"), QStringLiteral("Kickoff"), dir.path());
         QCOMPARE(meeting.value(QStringLiteral("path")).toString(),
-                 dir.filePath(QStringLiteral("Meetings/%1-Kickoff.md").arg(today)));
+                 dir.filePath(QStringLiteral("03-projects/meetings/%1-Kickoff.md").arg(today)));
         const QString text = readFile(meeting.value(QStringLiteral("path")).toString());
         QVERIFY(text.contains(QStringLiteral("title: \"Kickoff\"")));
         QVERIFY(text.contains(QStringLiteral("author: \"Test Author\"")));
@@ -774,7 +777,7 @@ private slots:
 
         // Daily: one per day, opened again rather than duplicated.
         const QVariantMap daily = templates.create(QStringLiteral("Daily"), QString(), dir.path());
-        QCOMPARE(daily.value(QStringLiteral("path")).toString(), dir.filePath(QStringLiteral("Daily/%1.md").arg(today)));
+        QCOMPARE(daily.value(QStringLiteral("path")).toString(), dir.filePath(QStringLiteral("03-projects/daily/%1.md").arg(today)));
         QVERIFY(!daily.value(QStringLiteral("existed")).toBool());
         const QVariantMap again = templates.create(QStringLiteral("Daily"), QString(), dir.path());
         QCOMPARE(again.value(QStringLiteral("path")), daily.value(QStringLiteral("path")));
@@ -2395,6 +2398,83 @@ private slots:
         QVERIFY(readFile(root.filePath(QStringLiteral("Meetings/2026-10-22-Vendor-kickoff.md"))).contains(QStringLiteral("[[Old-note]]")));
         QVERIFY(done.value(QStringLiteral("linksUpdated")).toInt() >= 1);
         QCOMPARE(api.call(tidy, {}).value(QStringLiteral("renamed")).toArray().size(), 0);
+    }
+
+    void startsANewFolderWithTheLayout() {
+        // An empty notes folder gets the numbered layout, and the built-in
+        // templates file their notes inside it.
+        QTemporaryDir root;
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root.path(), &error));
+        QVERIFY(Layout::present(root.path()));
+        for (const QString &folder : Layout::folders())
+            QVERIFY2(QFileInfo(root.filePath(folder)).isDir(), qPrintable(folder));
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("01-system/SYSTEM-RULES.md"))));
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("02-context/.keep"))));
+        const QJsonObject daily = api.call(*NotesApi::toolNamed(QStringLiteral("daily_note")), {});
+        QVERIFY(daily.value(QStringLiteral("path")).toString().startsWith(QStringLiteral("03-projects/daily/")));
+        const QJsonObject meeting = api.call(*NotesApi::toolNamed(QStringLiteral("create_note")),
+                                             {{QStringLiteral("title"), QStringLiteral("Kickoff")},
+                                              {QStringLiteral("template"), QStringLiteral("Meeting")}});
+        QVERIFY(meeting.value(QStringLiteral("path")).toString().startsWith(QStringLiteral("03-projects/meetings/")));
+
+        // Agents get the rules with info; the rules files link nothing.
+        const QJsonObject layout = api.call(*NotesApi::toolNamed(QStringLiteral("vault_info")), {})
+                                       .value(QStringLiteral("layout")).toObject();
+        QVERIFY(layout.value(QStringLiteral("numbered")).toBool());
+        QVERIFY(layout.value(QStringLiteral("rules")).toObject().value(QStringLiteral("text")).toString().contains(QStringLiteral("## Naming")));
+        QVERIFY(layout.value(QStringLiteral("howIWork")).toObject().contains(QStringLiteral("text")));
+        QVERIFY(api.call(*NotesApi::toolNamed(QStringLiteral("link_report")), {})
+                    .value(QStringLiteral("broken")).toArray().isEmpty());
+
+        // A folder that already has notes keeps its own folders.
+        QTemporaryDir used;
+        writeFile(used.filePath(QStringLiteral("Idea.md")), "# Idea\n");
+        NotesApi other;
+        QVERIFY(other.open(used.path(), &error));
+        QVERIFY(!Layout::present(used.path()));
+        QVERIFY(other.call(*NotesApi::toolNamed(QStringLiteral("daily_note")), {})
+                    .value(QStringLiteral("path")).toString().startsWith(QStringLiteral("Daily/")));
+    }
+
+    void setsUpTheLayoutInAnOlderFolder() {
+        QTemporaryDir root;
+        writeFile(root.filePath(QStringLiteral("Idea.md")), "# Idea\nFrom [[2026-01-05]] and [[Meetings/Kickoff]].\n");
+        writeFile(root.filePath(QStringLiteral("Daily/2026-01-05.md")), "# Monday\n");
+        writeFile(root.filePath(QStringLiteral("Meetings/Kickoff.md")), "# Kickoff\nSee [[Idea]].\n");
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root.path(), &error));
+        const auto setup = *NotesApi::toolNamed(QStringLiteral("setup_layout"));
+
+        const QJsonObject plan = api.call(setup, {});
+        QCOMPARE(plan.value(QStringLiteral("moved")).toArray().size(), 2);
+        QVERIFY(plan.value(QStringLiteral("templates")).toArray().contains(QStringLiteral("Meeting")));
+        QVERIFY(plan.value(QStringLiteral("leftInPlace")).toArray().contains(QStringLiteral("Idea.md")));
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("Daily/2026-01-05.md"))));
+        QVERIFY(!Layout::present(root.path()));
+
+        const QJsonObject done = api.call(setup, {{QStringLiteral("apply"), true}});
+        QVERIFY(done.value(QStringLiteral("applied")).toBool());
+        QVERIFY(Layout::present(root.path()));
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("03-projects/daily/2026-01-05.md"))));
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("03-projects/meetings/Kickoff.md"))));
+        QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("Daily"))));
+        QVERIFY(readFile(root.filePath(QStringLiteral("Idea.md"))).contains(QStringLiteral("[[03-projects/meetings/Kickoff]]")));
+        QVERIFY(readFile(root.filePath(QStringLiteral(".omazettel/note-templates/Meeting.md")))
+                    .contains(QStringLiteral("folder=\"03-projects/meetings\"")));
+        QVERIFY(api.call(*NotesApi::toolNamed(QStringLiteral("link_report")), {})
+                    .value(QStringLiteral("broken")).toArray().isEmpty());
+        QVERIFY(api.call(*NotesApi::toolNamed(QStringLiteral("daily_note")), {{QStringLiteral("date"), QStringLiteral("2026-01-06")}})
+                    .value(QStringLiteral("path")).toString().startsWith(QStringLiteral("03-projects/daily/")));
+
+        // Run again: nothing left to do. An edited rules file is kept.
+        writeFile(root.filePath(QStringLiteral("01-system/SYSTEM-RULES.md")), "# Mine\n");
+        const QJsonObject again = api.call(setup, {{QStringLiteral("apply"), true}});
+        QVERIFY(again.value(QStringLiteral("moved")).toArray().isEmpty());
+        QVERIFY(again.value(QStringLiteral("made")).toArray().isEmpty());
+        QCOMPARE(readFile(root.filePath(QStringLiteral("01-system/SYSTEM-RULES.md"))), QStringLiteral("# Mine\n"));
     }
 
     void writesMeetingNotesWithAnAgent() {
