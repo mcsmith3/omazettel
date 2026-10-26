@@ -19,6 +19,7 @@ SOURCES += \
     ../../src/citations.cpp \
     ../../src/exporter.cpp \
     ../../src/noteindex.cpp \
+    ../../src/layout.cpp \
     ../../src/notetemplates.cpp \
     ../../src/sync.cpp \
     ../../src/textdiff.cpp \
@@ -38,6 +39,7 @@ HEADERS += \
     ../../src/citations.h \
     ../../src/exporter.h \
     ../../src/noteindex.h \
+    ../../src/layout.h \
     ../../src/notetemplates.h \
     ../../src/sync.h \
     ../../src/textdiff.h \

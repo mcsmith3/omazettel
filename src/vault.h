@@ -28,6 +28,9 @@ class Vault : public QObject {
     Q_PROPERTY(bool autoCreateLinks READ autoCreateLinks WRITE setAutoCreateLinks NOTIFY autoCreateLinksChanged)
     // What stands for a space in new note file names: "-", "_" or " ".
     Q_PROPERTY(QString fileNameSeparator READ fileNameSeparator WRITE setFileNameSeparator NOTIFY fileNameSeparatorChanged)
+    // How new, empty notes folders start: "numbered" (AI-first),
+    // "traditional", or "" before the first-run question is answered.
+    Q_PROPERTY(QString folderLayout READ folderLayout WRITE setFolderLayout NOTIFY folderLayoutChanged)
 
 public:
     explicit Vault(QObject *parent = nullptr);
@@ -47,6 +50,11 @@ public:
     bool autoCreateLinks() const { return m_autoCreateLinks; }
     static QString fileNameSeparator();
     void setFileNameSeparator(const QString &separator);
+    QString folderLayout() const;
+    void setFolderLayout(const QString &layout);
+    // The open folder is empty and OmaZettel has not set it up yet, so it
+    // can still start either way.
+    Q_INVOKABLE bool isNewFolder() const;
     void setAutoCreateLinks(bool enabled);
     void setPanelVisible(bool visible);
 
@@ -106,6 +114,7 @@ signals:
     void panelVisibleChanged();
     void autoCreateLinksChanged();
     void fileNameSeparatorChanged();
+    void folderLayoutChanged();
     // Notes or folders were created, renamed, moved or trashed.
     void contentsChanged();
 

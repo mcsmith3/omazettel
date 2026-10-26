@@ -208,6 +208,20 @@ Dialog {
                 }
             }
             Small { text: "Links work either way: [[Cutover plan]] finds Cutover-plan.md." }
+            RowLayout {
+                spacing: root.scaled(8)
+                Small { text: "New, empty notes folders start" }
+                ComboBox {
+                    objectName: "folderLayoutBox"
+                    readonly property var values: ["numbered", "traditional"]
+                    model: ["AI-first  (numbered folders, rules for agents)", "Traditional  (just your notes)"]
+                    currentIndex: vault.folderLayout === "traditional" ? 1 : 0
+                    onActivated: function(index) { vault.folderLayout = values[index]; }
+                    font.family: Qt.application.font.family
+                    font.pixelSize: root.scaled(12)
+                }
+            }
+            Small { text: "A folder that already has notes keeps its folders; omazettel setup-layout moves one to AI-first." }
 
             // ── Export ──────────────────────────────────────────────────────
             Heading { text: "Export" }

@@ -630,6 +630,17 @@ ApplicationWindow {
             historyDialog.openFor(path, editor.text);
     }
 
+    // The first empty notes folder asks how to start: AI-first or traditional.
+    function askLayoutIfNew() {
+        if (vault.folderLayout === "" && vault.isNewFolder())
+            layoutChoiceDialog.open();
+    }
+
+    Connections {
+        target: vault
+        function onRootPathChanged() { Qt.callLater(win.askLayoutIfNew); }
+    }
+
     function chooseFolder() {
         if (vault.isOpen)
             folderDialog.currentFolder = vault.urlForPath(vault.rootPath);
@@ -1029,6 +1040,21 @@ ApplicationWindow {
 
         onKeepRequested: backend.keepExternalVersion()
         onReloadRequested: backend.reloadFromDisk()
+    }
+
+    LayoutChoiceDialog {
+        id: layoutChoiceDialog
+        darkMode: win.darkMode
+        textScale: win.textScale
+        textColor: win.textColor
+        strongTextColor: win.textColor
+        activeButtonColor: backend.themeAccent
+        containerWidth: win.width
+        containerHeight: win.height
+        onChosen: function(layout) {
+            vault.folderLayout = layout;
+            noteTemplates.ensureDefaults();
+        }
     }
 
     Dialogs.FolderDialog {
@@ -2319,6 +2345,7 @@ ApplicationWindow {
         width = geometry.width;
         height = geometry.height;
         if (geometry.maximized) showMaximized();
+        Qt.callLater(askLayoutIfNew);
     }
 
     Component.onDestruction: backend.saveWindowGeometry(x, y, width, height, visibility === Window.Maximized)

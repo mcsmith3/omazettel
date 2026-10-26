@@ -2,6 +2,7 @@
 
 #include "assistant.h"
 #include "exporter.h"
+#include "layout.h"
 #include "sync.h"
 #include "transcriber.h"
 #include "vault.h"
@@ -280,7 +281,9 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
     static const QList<Tool> list = {
         {QStringLiteral("vault_info"), QStringLiteral("info"),
          QStringLiteral("The notes folder in use: where it is, how many notes, the note templates and export "
-                        "profiles there are, sync status and whether recordings can be transcribed."),
+                        "profiles there are, sync status, whether recordings can be transcribed, and the folder layout "
+                        "with the person's rules for agents (01-system/SYSTEM-RULES.md and HOW-I-WORK.md): "
+                        "call it first and follow those rules."),
          {}, true, false, &NotesApi::info},
         {QStringLiteral("list_notes"), QStringLiteral("list"),
          QStringLiteral("Lists notes, optionally only those in a folder, with a tag, or changed recently."),
@@ -389,6 +392,13 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
          {{QStringLiteral("folder"), QStringLiteral("string"), QStringLiteral("Only notes in this folder (default: all)"), false, true},
           {QStringLiteral("apply"), QStringLiteral("boolean"), QStringLiteral("Rename them (default: only show what would change)")}},
          false, false, &NotesApi::tidyNames},
+        {QStringLiteral("setup_layout"), QStringLiteral("setup-layout"),
+         QStringLiteral("Gives the notes folder the numbered layout: 01-system (SYSTEM-RULES.md, HOW-I-WORK.md), "
+                        "02-context, 03-projects, 04-outputs, 99-archive. Moves the older Daily, Meetings, "
+                        "Literature and Archive folders into it, points the note templates there and keeps "
+                        "[[links]] working. Never overwrites a file. Shows the plan unless apply is set."),
+         {{QStringLiteral("apply"), QStringLiteral("boolean"), QStringLiteral("Make the changes (default: only show what would change)")}},
+         false, false, &NotesApi::setupLayout},
         {QStringLiteral("move_note"), QStringLiteral("move"),
          QStringLiteral("Moves a note or folder into another folder (made if missing) and rewrites [[links]] "
                         "that name it by path."),
@@ -951,6 +961,21 @@ QJsonObject NotesApi::info(const QJsonObject &) {
     }
     const QString engine = Transcriber::engine();
     const QString model = engine == QLatin1String("whisper.cpp") ? Transcriber::findModel(QString()) : QString();
+    // The person's rules for agents travel with the answer, so an agent
+    // that asks for info has them before it changes anything.
+    QJsonObject layoutInfo{{QStringLiteral("numbered"), Layout::present(m_root)}};
+    if (Layout::present(m_root)) {
+        layoutInfo.insert(QStringLiteral("guide"), Layout::guide());
+        for (const auto &[key, file] : {std::pair{"rules", Layout::rulesFile}, std::pair{"howIWork", Layout::howIWorkFile}}) {
+            const QString path = QDir(m_root).filePath(QString::fromLatin1(file));
+            if (QFileInfo(path).isFile())
+                layoutInfo.insert(QLatin1String(key), QJsonObject{{QStringLiteral("path"), QString::fromLatin1(file)},
+                                                                  {QStringLiteral("text"), read(path)}});
+        }
+    } else {
+        layoutInfo.insert(QStringLiteral("hint"), QStringLiteral("This notes folder has its own folders. "
+                                                                 "omazettel setup-layout would give it the numbered layout."));
+    }
     return {{QStringLiteral("vault"), m_root},
             {QStringLiteral("notes"), m_index.noteCount()},
             {QStringLiteral("tags"), int(m_index.tags().size())},
@@ -960,6 +985,7 @@ QJsonObject NotesApi::info(const QJsonObject &) {
             {QStringLiteral("sync"), syncInfo},
             {QStringLiteral("autoCreateLinks"), QSettings().value(QStringLiteral("notes/autoCreateLinks"), true).toBool()},
             {QStringLiteral("fileNameSeparator"), Vault::fileNameSeparator()},
+            {QStringLiteral("layout"), layoutInfo},
             {QStringLiteral("transcription"), QJsonObject{
                  {QStringLiteral("engine"), engine.isEmpty() ? QJsonValue() : QJsonValue(engine)},
                  {QStringLiteral("model"), model.isEmpty() ? QJsonValue() : QJsonValue(QFileInfo(model).fileName())},
@@ -1320,7 +1346,7 @@ QJsonObject NotesApi::dailyNote(const QJsonObject &args) {
     bool existed = false;
     QString path;
     if (m_templates.pathOf(QStringLiteral("Daily")).isEmpty()) {
-        const QString folder = folderPath(QStringLiteral("Daily"), true);
+        const QString folder = folderPath(Layout::dailyFolder(m_root), true);
         path = QDir(folder).filePath(day.toString(Qt::ISODate) + QStringLiteral(".md"));
         existed = QFileInfo(path).isFile();
         if (!existed)
@@ -1470,6 +1496,131 @@ QJsonObject NotesApi::tidyNames(const QJsonObject &args) {
             {QStringLiteral("renamed"), renamed},
             {QStringLiteral("skipped"), skipped},
             {QStringLiteral("linksUpdated"), links},
+            {QStringLiteral("message"), message}};
+}
+
+QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
+    const bool apply = flag(args, QStringLiteral("apply"), false);
+    const QDir root(m_root);
+    QStringList lines;
+    QJsonArray moved;
+    QJsonArray skipped;
+    QSet<QString> moveTargets;
+
+    // 1. The older folders move in, links and all.
+    const QStringList top = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const Layout::Move &move : Layout::moves()) {
+        QString from;
+        for (const QString &name : top) {
+            if (name.compare(move.from, Qt::CaseInsensitive) == 0)
+                from = root.filePath(name);
+        }
+        if (from.isEmpty())
+            continue;
+        const QString to = root.filePath(move.to);
+        // A layout folder made earlier holds only its .keep; that one is
+        // taken away so the old folder can take its place.
+        const bool onlyKeep = QFileInfo(to).isDir()
+                              && QDir(to).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden)
+                                     == QStringList{QStringLiteral(".keep")};
+        if (QFileInfo::exists(to) && !onlyKeep) {
+            skipped.append(QJsonObject{{QStringLiteral("from"), relative(from)}, {QStringLiteral("to"), move.to},
+                                       {QStringLiteral("reason"), QStringLiteral("%1 already exists").arg(move.to)}});
+            lines.append(QStringLiteral("  skipped %1/ (%2/ already exists; move its notes with omazettel move)")
+                             .arg(relative(from), move.to));
+            continue;
+        }
+        moveTargets.insert(move.to.section(QLatin1Char('/'), 0, 0));
+        QJsonObject item{{QStringLiteral("from"), relative(from)}, {QStringLiteral("to"), move.to}};
+        if (apply) {
+            if (onlyKeep) {
+                QFile::remove(QDir(to).filePath(QStringLiteral(".keep")));
+                QDir().rmdir(to);
+            }
+            const QJsonObject done = relocate(from, to);
+            item.insert(QStringLiteral("linksUpdated"), done.value(QStringLiteral("linksUpdated")));
+        }
+        moved.append(item);
+        lines.append(QStringLiteral("  move %1/ -> %2/").arg(relative(from), move.to));
+    }
+
+    // 2. The folders and rules files that are missing.
+    QJsonArray made;
+    if (apply) {
+        for (const QString &entry : Layout::create(m_root))
+            made.append(entry);
+    } else {
+        for (const QString &folder : Layout::folders()) {
+            if (!QFileInfo(root.filePath(folder)).isDir() && !moveTargets.contains(folder))
+                made.append(folder + QLatin1Char('/'));
+        }
+        for (const char *file : {Layout::rulesFile, Layout::howIWorkFile}) {
+            if (!QFileInfo::exists(root.filePath(QString::fromLatin1(file))))
+                made.append(QString::fromLatin1(file));
+        }
+    }
+    for (const QJsonValue &entry : std::as_const(made))
+        lines.append(QStringLiteral("  make %1").arg(entry.toString()));
+
+    // 3. Templates that put notes in an older folder put them in the new one.
+    QJsonArray templates;
+    for (const QVariant &entry : m_templates.list()) {
+        const QString path = entry.toMap().value(QStringLiteral("path")).toString();
+        QString text = read(path);
+        const QString before = text;
+        for (const Layout::Move &move : Layout::moves()) {
+            const QRegularExpression folderRe(
+                QStringLiteral("(<!--\\s*omazettel:[^\\n]*?folder=\")%1(/[^\"]*)?(\")")
+                    .arg(QRegularExpression::escape(move.from)),
+                QRegularExpression::CaseInsensitiveOption);
+            text.replace(folderRe, QStringLiteral("\\1%1\\2\\3").arg(move.to));
+        }
+        if (text == before)
+            continue;
+        templates.append(entry.toMap().value(QStringLiteral("name")).toString());
+        lines.append(QStringLiteral("  point the %1 template at its new folder").arg(entry.toMap().value(QStringLiteral("name")).toString()));
+        if (apply)
+            write(path, text);
+    }
+    if (apply && !templates.isEmpty())
+        m_templates.reload();
+
+    // 4. Everything else stays where it is; say so, so nothing is a surprise.
+    QJsonArray left;
+    QStringList known = Layout::folders();
+    for (const Layout::Move &move : Layout::moves())
+        known.append(move.from);
+    for (const QString &name : root.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+        bool isKnown = false;
+        for (const QString &k : std::as_const(known))
+            isKnown = isKnown || name.compare(k, Qt::CaseInsensitive) == 0;
+        if (!isKnown)
+            left.append(name);
+    }
+
+    const bool nothing = moved.isEmpty() && made.isEmpty() && templates.isEmpty();
+    QString message;
+    if (nothing)
+        message = QStringLiteral("The notes folder already has the layout.");
+    else if (apply)
+        message = QStringLiteral("Set up the folder layout:\n%1").arg(lines.join(QLatin1Char('\n')));
+    else
+        message = QStringLiteral("Would set up the folder layout (nothing changed yet; add --apply to do it):\n%1")
+                      .arg(lines.join(QLatin1Char('\n')));
+    if (!left.isEmpty()) {
+        QStringList names;
+        for (const QJsonValue &name : std::as_const(left))
+            names.append(name.toString());
+        message += QStringLiteral("\nLeft where they are: %1. Move them yourself when you like, e.g. "
+                                  "omazettel move \"%2\" 02-context (reference) or 03-projects (active work).")
+                       .arg(names.join(QStringLiteral(", ")), names.first());
+    }
+    return {{QStringLiteral("applied"), apply},
+            {QStringLiteral("moved"), moved},
+            {QStringLiteral("made"), made},
+            {QStringLiteral("templates"), templates},
+            {QStringLiteral("skipped"), skipped},
+            {QStringLiteral("leftInPlace"), left},
             {QStringLiteral("message"), message}};
 }
 
@@ -1810,7 +1961,9 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
         QStringList names;
         for (const QVariant &entry : m_index.notes()) {
             const QString folder = entry.toMap().value(QStringLiteral("folder")).toString();
-            if (folder.startsWith(QLatin1String("Daily")) || folder.startsWith(QLatin1String("Meetings")))
+            if (folder.startsWith(QLatin1String("Daily")) || folder.startsWith(QLatin1String("Meetings"))
+                    || folder.startsWith(Layout::dailyFolder(m_root)) || folder.startsWith(Layout::meetingsFolder(m_root))
+                    || folder.startsWith(QLatin1String(Layout::systemFolder)))
                 continue;
             names.append(entry.toMap().value(QStringLiteral("name")).toString());
             if (names.size() >= 400)
