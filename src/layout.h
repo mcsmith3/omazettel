@@ -29,6 +29,16 @@ inline constexpr auto howIWorkFile = "01-system/HOW-I-WORK.md";
 // The five folders, in order.
 QStringList folders();
 
+// How new, empty notes folders start, chosen on first run and in Settings:
+// "numbered" (AI-first, the layout above), "traditional" (the templates'
+// Daily, Meetings and Literature folders and nothing else), or "" when
+// nobody has chosen yet.
+QString choice();
+void setChoice(const QString &value);
+// Whether an empty notes folder gets the layout: yes unless traditional
+// was chosen, so the command line and agents get it by default.
+bool wanted();
+
 // Whether the notes folder uses the layout (it has 01-system and 03-projects).
 bool present(const QString &root);
 

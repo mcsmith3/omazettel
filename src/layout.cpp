@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSettings>
 
 namespace Layout {
 
@@ -10,6 +11,24 @@ QStringList folders() {
     return {QString::fromLatin1(systemFolder), QString::fromLatin1(contextFolder),
             QString::fromLatin1(projectsFolder), QString::fromLatin1(outputsFolder),
             QString::fromLatin1(archiveFolder)};
+}
+
+namespace {
+const QString choiceSetting = QStringLiteral("notes/layout");
+}
+
+QString choice() {
+    const QString value = QSettings().value(choiceSetting).toString();
+    return value == QLatin1String("numbered") || value == QLatin1String("traditional") ? value : QString();
+}
+
+void setChoice(const QString &value) {
+    if (value == QLatin1String("numbered") || value == QLatin1String("traditional"))
+        QSettings().setValue(choiceSetting, value);
+}
+
+bool wanted() {
+    return choice() != QLatin1String("traditional");
 }
 
 bool present(const QString &root) {

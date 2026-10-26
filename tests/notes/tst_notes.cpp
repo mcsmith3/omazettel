@@ -2438,6 +2438,54 @@ private slots:
                     .value(QStringLiteral("path")).toString().startsWith(QStringLiteral("Daily/")));
     }
 
+    void asksHowANewFolderStarts() {
+        // Traditional: an empty folder gets only the templates' own folders.
+        Layout::setChoice(QStringLiteral("traditional"));
+        QTemporaryDir plain;
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(plain.path(), &error));
+        QVERIFY(!Layout::present(plain.path()));
+        QVERIFY(api.call(*NotesApi::toolNamed(QStringLiteral("daily_note")), {})
+                    .value(QStringLiteral("path")).toString().startsWith(QStringLiteral("Daily/")));
+        QVERIFY(!api.call(*NotesApi::toolNamed(QStringLiteral("vault_info")), {})
+                     .value(QStringLiteral("layout")).toObject().value(QStringLiteral("numbered")).toBool());
+
+        // The first empty folder opened in the app asks, and the answer sticks.
+        QSettings().remove(QStringLiteral("notes/layout"));
+        QTemporaryDir dir;
+        Backend backend;
+        Vault vault;
+        QVERIFY(vault.openFolder(dir.path()));
+        QVERIFY(vault.isNewFolder());
+        QQmlEngine engine;
+        QScopedPointer<QObject> window(loadMain(engine, backend, vault));
+        QVERIFY(window);
+        auto *dialog = window->findChild<QObject *>(QStringLiteral("layoutChoiceDialog"));
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        QMetaObject::invokeMethod(dialog, "pick", Q_ARG(QVariant, QStringLiteral("numbered")));
+        QCOMPARE(vault.folderLayout(), QStringLiteral("numbered"));
+        QVERIFY(Layout::present(dir.path()));
+        QVERIFY(QFileInfo::exists(dir.filePath(QStringLiteral(".omazettel/note-templates/Daily.md"))));
+        QVERIFY(!vault.isNewFolder());
+
+        // Once chosen, another empty folder follows the choice without asking.
+        QTemporaryDir second;
+        QVERIFY(vault.openFolder(second.path()));
+        QTest::qWait(50);
+        QVERIFY(!dialog->property("opened").toBool());
+
+        // A folder with notes never asks.
+        QSettings().remove(QStringLiteral("notes/layout"));
+        QTemporaryDir used;
+        writeFile(used.filePath(QStringLiteral("Idea.md")), "# Idea\n");
+        QVERIFY(vault.openFolder(used.path()));
+        QVERIFY(!vault.isNewFolder());
+        QTest::qWait(50);
+        QVERIFY(!dialog->property("opened").toBool());
+    }
+
     void setsUpTheLayoutInAnOlderFolder() {
         QTemporaryDir root;
         writeFile(root.filePath(QStringLiteral("Idea.md")), "# Idea\nFrom [[2026-01-05]] and [[Meetings/Kickoff]].\n");

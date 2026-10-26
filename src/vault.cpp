@@ -1,5 +1,6 @@
 #include "vault.h"
 
+#include "layout.h"
 #include "notestree.h"
 
 #include <QDir>
@@ -73,6 +74,22 @@ void Vault::setFileNameSeparator(const QString &separator) {
         return;
     QSettings().setValue(QStringLiteral("notes/fileNameSeparator"), value);
     emit fileNameSeparatorChanged();
+}
+
+QString Vault::folderLayout() const {
+    return Layout::choice();
+}
+
+void Vault::setFolderLayout(const QString &layout) {
+    if (layout == folderLayout())
+        return;
+    Layout::setChoice(layout);
+    emit folderLayoutChanged();
+}
+
+bool Vault::isNewFolder() const {
+    return isOpen() && Layout::isEmpty(m_rootPath)
+           && !QFileInfo::exists(QDir(m_rootPath).filePath(QStringLiteral(".omazettel/note-templates")));
 }
 
 void Vault::setAutoCreateLinks(bool enabled) {

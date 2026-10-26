@@ -160,8 +160,9 @@ void NoteTemplates::ensureDefaults() {
     if (dir.isEmpty() || QFileInfo(dir).exists())
         return;
     // A notes folder OmaZettel has never seen. If it is empty, it starts
-    // with the numbered layout; one that has notes keeps its own folders.
-    if (Layout::isEmpty(m_root))
+    // with the numbered layout unless traditional folders were chosen; one
+    // that has notes keeps its own folders.
+    if (Layout::isEmpty(m_root) && Layout::wanted())
         Layout::create(m_root);
     QDir().mkpath(dir);
     for (const auto &[name, text] : starterTemplates(m_root)) {

@@ -153,7 +153,10 @@ cd omazettel
 
 1. Open **OmaZettel** from the app launcher.
 2. Click **Choose folder…** and pick a folder of Markdown notes, or an empty
-   folder to start one. OmaZettel reopens it, at the note you had open, next time.
+   folder to start one. For an empty folder, OmaZettel asks once how to start
+   it: **AI-first** (the [numbered folder layout](#folder-layout)) or
+   **Traditional** (just your notes). OmaZettel reopens the folder, at the note
+   you had open, next time.
 3. Press **Ctrl+N** for a new note, pick a template, and give it a title.
 4. Type `[[` to link to another note. Ctrl+click a link to follow it.
 5. Press **Ctrl+Shift+P** for every command, and **Ctrl+,** for settings.
@@ -189,8 +192,9 @@ xdg-mime default omazettel.desktop text/markdown text/x-markdown
 
 ## Folder layout
 
-A new, empty notes folder starts with a numbered layout, so you and AI agents
-find things in the same places:
+The first time you open an empty notes folder, OmaZettel asks how to start
+it. **AI-first** gives it a numbered layout, so you and AI agents find
+things in the same places:
 
 ```
 01-system/      SYSTEM-RULES.md (rules agents follow) and HOW-I-WORK.md (about you)
@@ -206,6 +210,13 @@ the results. 99 keeps the archive at the end. Agents using the
 files before changing anything (`omazettel info` returns both), so put your
 own rules and background there. OmaZettel writes starter versions once and
 never changes them after that.
+
+**Traditional** skips all of this. The folder holds just your notes, and the
+Daily, Meeting and Literature templates make `Daily/`, `Meetings/` and
+`Literature/` the first time you use them. Your answer applies to every new
+folder after this one; change it in Settings → "New, empty notes folders
+start". The command line and agents use the same setting. If nobody has
+chosen yet, they use AI-first.
 
 File names say when, what and how far along. Anything tied to a day starts with
 the date (`2026-10-25-kickoff`; the Daily and Meeting templates do this),
