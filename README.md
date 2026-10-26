@@ -14,7 +14,7 @@ OmaZettel is an independent fork of [Omawrite](https://github.com/omacom/omawrit
 by David Heinemeier Hansson, extended into a notes system. It is not made or
 endorsed by Omacom or the Omarchy project.
 
-> **Status: 0.8.2, early.** Everything below works and is covered by tests, but
+> **Status: 0.9.0, early.** Everything below works and is covered by tests, but
 > OmaZettel is young: expect rough edges, and keep your notes folder in git or
 > another backup. Bug reports and ideas are welcome in the issues.
 
