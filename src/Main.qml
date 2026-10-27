@@ -96,9 +96,19 @@ ApplicationWindow {
 
     // Opening another note saves the current one first when auto-save would
     // have saved it anyway, and asks only when it would not.
+    // A PDF in the notes folder shown in place of the editor; "" for none.
+    property string pdfPath: ""
+
     function openNote(url) {
-        if (vault.pathForUrl(url) === currentPath())
+        var path = vault.pathForUrl(url);
+        if (/\.pdf$/i.test(path)) {
+            pdfPath = path;
             return;
+        }
+        if (path === currentPath()) {
+            pdfPath = "";
+            return;
+        }
         if (!navigatingHistory && currentPath().length > 0) {
             backStack = backStack.concat([backend.fileUrl]).slice(-100);
             forwardStack = [];
@@ -114,6 +124,10 @@ ApplicationWindow {
     // was running. Like openNote(), it saves or asks about the open note
     // first; a file that does not exist yet starts a new one there.
     function openFromLaunch(url) {
+        if (/\.pdf$/i.test(vault.pathForUrl(url))) {
+            pdfPath = vault.pathForUrl(url);
+            return;
+        }
         if (vault.pathForUrl(url) === currentPath())
             return;
         if (currentPath().length > 0) {
@@ -1145,6 +1159,27 @@ ApplicationWindow {
         headings: win.outlineHeadings
         cursorPosition: editor.cursorPosition
         onHeadingRequested: function(position) { win.showPosition(position, 0); }
+    }
+
+    PdfView {
+        id: pdfView
+        anchors.fill: parent
+        anchors.leftMargin: win.sidebarWidth
+        anchors.rightMargin: win.panelWidth
+        z: 5
+        path: win.pdfPath
+        darkMode: win.darkMode
+        textScale: win.textScale
+        pageColor: win.pageColor
+        textColor: win.textColor
+        mutedColor: win.mutedColor
+        onCloseRequested: win.pdfPath = ""
+    }
+
+    Connections {
+        target: backend
+        // A note opened (from a link, history or search): it takes the middle.
+        function onFileUrlChanged() { win.pdfPath = ""; }
     }
 
     ExportDialog {

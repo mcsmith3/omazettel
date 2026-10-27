@@ -21,4 +21,14 @@ cd "$BUILD_DIR"
 "$QMAKE" "$ROOT/omazettel.pro"
 make -j"$JOBS"
 
+# The PDF view's reader, a separate library so OmaZettel runs without
+# poppler-qt6 (it then says what to install).
+if pkg-config --exists poppler-qt6 2>/dev/null; then
+  mkdir -p "$BUILD_DIR/pdf"
+  (cd "$BUILD_DIR/pdf" && "$QMAKE" "$ROOT/pdf/pdf.pro" && make -j"$JOBS")
+  echo "Built $BUILD_DIR/libomazettel-pdf.so"
+else
+  echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (sudo pacman -S poppler-qt6)." >&2
+fi
+
 echo "Built $BUILD_DIR/omazettel"

@@ -37,7 +37,7 @@ jobs:
         # the filesystem one off; this throwaway build container turns both off.
         run: |
           sed -i 's/^#DisableSandbox/DisableSandbox/' /etc/pacman.conf
-          pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono
+          pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative poppler-qt6 ttf-jetbrains-mono
       - uses: actions/checkout@v4
       - name: Build, test and package
         env:

@@ -23,6 +23,7 @@ HEADERS += \
     src/textdiff.h \
     src/systemtheme.h \
     src/notestree.h \
+    src/pdfdocument.h \
     src/singleinstance.h \
     src/vault.h \
     src/zettel.h
@@ -49,6 +50,7 @@ SOURCES += \
     src/textdiff.cpp \
     src/systemtheme.cpp \
     src/notestree.cpp \
+    src/pdfdocument.cpp \
     src/singleinstance.cpp \
     src/vault.cpp \
     src/zettel.cpp

@@ -13,8 +13,8 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/mcsmith3/omazettel'
 license=('GPL-3.0-or-later' 'MIT')
 install='omazettel.install'
-depends=('qt6-base>=6.6' 'qt6-declarative>=6.6' 'xdg-desktop-portal')
-makedepends=('gcc' 'make' 'qt6-base>=6.6' 'qt6-declarative>=6.6')
+depends=('qt6-base>=6.8' 'qt6-declarative>=6.8' 'poppler-qt6' 'xdg-desktop-portal')
+makedepends=('gcc' 'make' 'pkgconf' 'qt6-base>=6.8' 'qt6-declarative>=6.8' 'poppler-qt6')
 optdepends=('ttf-jetbrains-mono-nerd: the monospace font Omarchy uses (any monospace font works)'
             'xdg-desktop-portal-gtk: file and folder pickers outside Omarchy'
             'pandoc-cli: export to PDF, Word, OpenDocument, HTML and more'
@@ -37,6 +37,7 @@ build() {
 package() {
   cd "$startdir/.."
   /usr/bin/install -Dm755 build/omazettel "$pkgdir/usr/bin/omazettel"
+  /usr/bin/install -Dm755 build/libomazettel-pdf.so "$pkgdir/usr/lib/omazettel/libomazettel-pdf.so"
   /usr/bin/install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   /usr/bin/install -Dm644 LICENSES/MIT-omawrite.txt "$pkgdir/usr/share/licenses/$pkgname/MIT-omawrite.txt"
   /usr/bin/install -Dm644 THIRD-PARTY-NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.md"

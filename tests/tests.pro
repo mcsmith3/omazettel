@@ -1,5 +1,8 @@
 QT += core gui concurrent quick testlib
-CONFIG += testcase c++17 exceptions
+CONFIG += testcase c++17 exceptions link_pkgconfig
+PKGCONFIG += poppler-qt6
+# The tests read PDFs directly rather than through the add-on library.
+DEFINES += OMAZETTEL_PDF_BUILT_IN
 TEMPLATE = app
 TARGET = tst_omazettel
 
@@ -26,6 +29,8 @@ SOURCES += \
     ../src/textdiff.cpp \
     ../src/zettel.cpp \
     ../src/notestree.cpp \
+    ../src/pdfdocument.cpp \
+    ../src/pdfrender.cpp \
     ../src/vault.cpp
 HEADERS += \
     ../src/transcriber.h \
@@ -46,6 +51,7 @@ HEADERS += \
     ../src/textdiff.h \
     ../src/zettel.h \
     ../src/notestree.h \
+    ../src/pdfdocument.h \
     ../src/vault.h
 
 QT += widgets printsupport quickcontrols2 quickdialogs2 dbus

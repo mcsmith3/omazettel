@@ -387,6 +387,10 @@ QString Vault::renameTarget(const QString &path, const QString &newName) {
     }
     if (info.isFile() && isNoteFile(inside) && !isNoteFile(name))
         name += QLatin1Char('.') + info.suffix();
+    // Other files (a PDF) keep their kind too.
+    else if (info.isFile() && !isNoteFile(inside) && !info.suffix().isEmpty()
+             && QFileInfo(name).suffix().compare(info.suffix(), Qt::CaseInsensitive) != 0)
+        name += QLatin1Char('.') + info.suffix();
 
     const QString target = QDir(info.absolutePath()).filePath(name);
     if (target != inside && QFileInfo::exists(target)) {
