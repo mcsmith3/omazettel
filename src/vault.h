@@ -2,6 +2,7 @@
 
 #include <QModelIndex>
 #include <QObject>
+#include <QTimer>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
@@ -31,6 +32,8 @@ class Vault : public QObject {
     // How new, empty notes folders start: "numbered" (AI-first),
     // "traditional", or "" before the first-run question is answered.
     Q_PROPERTY(QString folderLayout READ folderLayout WRITE setFolderLayout NOTIFY folderLayoutChanged)
+    // Whether the maps of content in 03-projects are kept up to date.
+    Q_PROPERTY(bool mapsOfContent READ mapsOfContent WRITE setMapsOfContent NOTIFY mapsOfContentChanged)
 
 public:
     explicit Vault(QObject *parent = nullptr);
@@ -55,6 +58,11 @@ public:
     // The open folder is empty and OmaZettel has not set it up yet, so it
     // can still start either way.
     Q_INVOKABLE bool isNewFolder() const;
+    bool mapsOfContent() const;
+    void setMapsOfContent(bool on);
+    // Brings the maps of content up to date now (normally done a moment
+    // after notes are added, moved or removed). Returns the maps written.
+    Q_INVOKABLE QStringList updateMaps();
     void setAutoCreateLinks(bool enabled);
     void setPanelVisible(bool visible);
 
@@ -115,6 +123,7 @@ signals:
     void autoCreateLinksChanged();
     void fileNameSeparatorChanged();
     void folderLayoutChanged();
+    void mapsOfContentChanged();
     // Notes or folders were created, renamed, moved or trashed.
     void contentsChanged();
 
@@ -124,6 +133,7 @@ private:
     QString insideOrEmpty(const QString &path) const;
 
     NotesTree *m_model = nullptr;
+    QTimer m_mapsTimer;
     QString m_rootPath;
     QStringList m_recentFolders;
     bool m_sidebarVisible = true;

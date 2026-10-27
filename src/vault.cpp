@@ -1,6 +1,7 @@
 #include "vault.h"
 
 #include "layout.h"
+#include "moc.h"
 #include "notestree.h"
 
 #include <QDir>
@@ -28,6 +29,17 @@ Vault::Vault(QObject *parent) : QObject(parent), m_model(new NotesTree(this)) {
     m_sidebarWidth = settings.value(sidebarWidthSetting, 260).toInt();
     m_panelVisible = settings.value(panelVisibleSetting, true).toBool();
     m_autoCreateLinks = settings.value(QStringLiteral("notes/autoCreateLinks"), true).toBool();
+
+    // The maps of content follow the tree: notes added, moved or removed
+    // here, by sync or in a file manager. A map written changes no rows
+    // after the first time, so this settles.
+    m_mapsTimer.setSingleShot(true);
+    m_mapsTimer.setInterval(600);
+    connect(&m_mapsTimer, &QTimer::timeout, this, [this]() { updateMaps(); });
+    const auto later = [this]() { if (mapsOfContent()) m_mapsTimer.start(); };
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, later);
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, later);
+    connect(this, &Vault::rootPathChanged, this, later);
 
     const QString saved = settings.value(folderSetting).toString();
     if (!saved.isEmpty() && QFileInfo(saved).isDir())
@@ -90,6 +102,29 @@ void Vault::setFolderLayout(const QString &layout) {
 bool Vault::isNewFolder() const {
     return isOpen() && Layout::isEmpty(m_rootPath)
            && !QFileInfo::exists(QDir(m_rootPath).filePath(QStringLiteral(".omazettel/note-templates")));
+}
+
+bool Vault::mapsOfContent() const {
+    return Moc::enabled();
+}
+
+void Vault::setMapsOfContent(bool on) {
+    if (on == mapsOfContent())
+        return;
+    Moc::setEnabled(on);
+    emit mapsOfContentChanged();
+    if (on)
+        m_mapsTimer.start();
+}
+
+QStringList Vault::updateMaps() {
+    m_mapsTimer.stop();
+    if (!isOpen())
+        return {};
+    const QStringList written = Moc::update(m_rootPath);
+    if (!written.isEmpty())
+        emit contentsChanged();
+    return written;
 }
 
 void Vault::setAutoCreateLinks(bool enabled) {
