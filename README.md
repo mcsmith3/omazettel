@@ -87,8 +87,9 @@ pieces, but are untested.)
 
 | Package | Why |
 | --- | --- |
-| `qt6-base` 6.6 or newer | Qt, the toolkit OmaZettel is built with |
-| `qt6-declarative` 6.6 or newer | Qt Quick, for the interface |
+| `qt6-base` 6.8 or newer | Qt, the toolkit OmaZettel is built with |
+| `qt6-declarative` 6.8 or newer | Qt Quick, for the interface |
+| `poppler-qt6` | Showing PDFs inside OmaZettel. Without it OmaZettel still runs, and opens PDFs in your PDF viewer instead |
 | `xdg-desktop-portal` and a backend (`xdg-desktop-portal-hyprland` or `-gtk`) | File and folder pickers |
 | A monospace font | The editor and interface use your desktop's monospace font (`fc-match monospace`); on Omarchy that is JetBrains Mono, set with `omarchy font set` |
 
@@ -96,7 +97,7 @@ pieces, but are untested.)
 and `makepkg`) and `git`.
 
 ```sh
-sudo pacman -S --needed base-devel git qt6-base qt6-declarative xdg-desktop-portal
+sudo pacman -S --needed base-devel git qt6-base qt6-declarative poppler-qt6 xdg-desktop-portal
 ```
 
 **For some features** (optional, install what you use):
@@ -318,6 +319,15 @@ tags: [meeting]
 [pandoc](https://pandoc.org). Pick a profile and where to save. The note's YAML
 header fills in the title, author and date; `[[links]]` become their text;
 unsaved changes are included.
+
+**Viewing PDFs.** PDFs in the notes folder, including the ones you export
+beside a note, are listed in the sidebar. Click one to read it in the middle of
+the window, in place of the note: scroll through the pages, zoom with
+**Ctrl+=** and **Ctrl+-**, and fit to the width with **Ctrl+0** or by clicking
+the zoom level. **Open** shows it in your desktop's PDF viewer, and ✕ (or
+clicking a note) goes back to writing. Export again and the view updates. It
+needs `poppler-qt6`, which the package installs; without it (an OmaStore
+install, for example), the view says what to install.
 
 The setup follows Zettlr's custom templates and reference documents, but uses
 pandoc's own files, so the same export works from a terminal:
@@ -622,8 +632,10 @@ folder at the last note. `omazettel --help` lists the commands (see
 
 ## Building from source
 
-You need the [requirements](#requirements) above: Qt 6.6 or newer
-(`qt6-base`, `qt6-declarative`), a C++17 compiler and `make`.
+You need the [requirements](#requirements) above: Qt 6.8 or newer
+(`qt6-base`, `qt6-declarative`), `poppler-qt6`, a C++17 compiler and `make`.
+`bin/build` also builds `libomazettel-pdf.so`, the PDF view's reader, which
+OmaZettel loads only when it shows a PDF.
 
 ```sh
 ./bin/build            # builds ./build/omazettel
@@ -652,7 +664,7 @@ attestation. To try the build before tagging, run it in the same container:
 
 ```sh
 docker run --rm -v "$PWD:/w" -w /w archlinux:latest bash -c \
-  'pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative ttf-jetbrains-mono && bin/release-build omazettel-v<version>'
+  'pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative poppler-qt6 ttf-jetbrains-mono && bin/release-build omazettel-v<version>'
 ```
 
 The code is laid out so changes from upstream Omawrite merge cleanly:

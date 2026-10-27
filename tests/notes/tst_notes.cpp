@@ -2,6 +2,8 @@
 // which tracks upstream Omawrite's tests.
 
 #include <QtTest>
+#include <QPainter>
+#include <QPdfWriter>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -23,6 +25,7 @@
 #include "mcpserver.h"
 #include "layout.h"
 #include "notesapi.h"
+#include "pdfdocument.h"
 #include "transcriber.h"
 #include "exporter.h"
 #include "noteindex.h"
@@ -279,7 +282,8 @@ private slots:
         writeFile(dir.filePath(QStringLiteral("b.md")), "x");
         writeFile(dir.filePath(QStringLiteral("Zed/Deep/inner.md")), "x");
         writeFile(dir.filePath(QStringLiteral("Alpha/note.markdown")), "x");
-        writeFile(dir.filePath(QStringLiteral("Alpha/skip.pdf")), "x");
+        writeFile(dir.filePath(QStringLiteral("Alpha/skip.docx")), "x");
+        writeFile(dir.filePath(QStringLiteral("Alpha/report.pdf")), "x");
         writeFile(dir.filePath(QStringLiteral(".omazettel/templates/t.md")), "x");
         QDir().mkpath(dir.filePath(QStringLiteral("Empty")));
 
@@ -300,7 +304,7 @@ private slots:
             walk(QModelIndex(), 0);
             return lines;
         };
-        const QStringList expected{QStringLiteral("Alpha"), QStringLiteral("  note.markdown"), QStringLiteral("Empty"),
+        const QStringList expected{QStringLiteral("Alpha"), QStringLiteral("  note.markdown"), QStringLiteral("  report.pdf"), QStringLiteral("Empty"),
                                    QStringLiteral("Zed"), QStringLiteral("  Deep"), QStringLiteral("    inner.md"),
                                    QStringLiteral("2 Two.md"), QStringLiteral("10 Ten.md"), QStringLiteral("b.md")};
         QCOMPARE(tree(), expected);
@@ -2525,6 +2529,75 @@ private slots:
         QCOMPARE(readFile(root.filePath(QStringLiteral("01-system/SYSTEM-RULES.md"))), QStringLiteral("# Mine\n"));
     }
 
+    void showsPdfsInTheMiddle() {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("plan.md")), "# Plan\n");
+        // A two-page PDF, as an export would make.
+        const QString pdf = dir.filePath(QStringLiteral("plan.pdf"));
+        {
+            QPdfWriter writer(pdf);
+            writer.setPageSize(QPageSize(QPageSize::A4));
+            QPainter painter(&writer);
+            painter.setFont(QFont(QStringLiteral("Sans"), 28));
+            painter.drawText(QPointF(400, 1200), QStringLiteral("Page one of the plan"));
+            writer.newPage();
+            painter.drawText(QPointF(400, 1200), QStringLiteral("Page two"));
+        }
+
+        // Pages are drawn at the width asked for.
+        const QImage page = PdfDocument::render(pdf, 0, 600);
+        QCOMPARE(page.width(), 600);
+        QVERIFY(qAbs(page.height() - 849) <= 2); // A4 is 1:1.414.
+        QVERIFY(PdfDocument::render(pdf, 5, 600).isNull());
+        QVERIFY(PdfDocument::render(dir.filePath(QStringLiteral("plan.md")), 0, 600).isNull());
+
+        Backend backend;
+        Vault vault;
+        QVERIFY(vault.openFolder(dir.path()));
+        // The sidebar lists it beside the note; renaming keeps it a PDF.
+        QVERIFY(vault.indexForPath(pdf).isValid());
+        QQmlEngine engine;
+        QScopedPointer<QObject> window(loadMain(engine, backend, vault));
+        QVERIFY(window);
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(dir.filePath(QStringLiteral("plan.md")))));
+        QTRY_COMPARE(backend.fileUrl(), QUrl::fromLocalFile(dir.filePath(QStringLiteral("plan.md"))));
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(pdf)));
+        auto *view = window->findChild<QObject *>(QStringLiteral("pdfView"));
+        QVERIFY(view);
+        QTRY_VERIFY(view->property("visible").toBool());
+        auto *document = window->findChild<QObject *>(QStringLiteral("pdfDocument"));
+        QTRY_COMPARE(document->property("pageCount").toInt(), 2);
+        QVERIFY(document->property("error").toString().isEmpty());
+        // The note stays open behind it.
+        QCOMPARE(backend.fileUrl(), QUrl::fromLocalFile(dir.filePath(QStringLiteral("plan.md"))));
+        if (qEnvironmentVariableIsSet("OMAZETTEL_PDF_SHOT")) {
+            auto *quickWindow = qobject_cast<QQuickWindow *>(window.get());
+            quickWindow->resize(1100, 800);
+            quickWindow->show();
+            QTest::qWait(1500);
+            quickWindow->grabWindow().save(qEnvironmentVariable("OMAZETTEL_PDF_SHOT"));
+        }
+        // Clicking the open note again goes back to it.
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(dir.filePath(QStringLiteral("plan.md")))));
+        QTRY_VERIFY(!view->property("visible").toBool());
+
+        // A new export replaces the file; the view reads it again.
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(pdf)));
+        QTRY_VERIFY(view->property("visible").toBool());
+        const int revision = document->property("revision").toInt();
+        {
+            QPdfWriter writer(pdf + QStringLiteral(".new"));
+            QPainter painter(&writer);
+            painter.drawText(QPointF(400, 1200), QStringLiteral("Only one page now"));
+        }
+        QFile::remove(pdf);
+        QFile::rename(pdf + QStringLiteral(".new"), pdf);
+        QTRY_VERIFY_WITH_TIMEOUT(document->property("revision").toInt() > revision
+                                     && document->property("pageCount").toInt() == 1, 5000);
+
+        QCOMPARE(QFileInfo(vault.renamePath(pdf, QStringLiteral("final plan"))).fileName(), QStringLiteral("final-plan.pdf"));
+    }
+
     void writesMeetingNotesWithAnAgent() {
         // A stand-in "claude" that answers like the real one.
         QTemporaryDir bin;
@@ -2724,6 +2797,7 @@ private:
         m_windowSync = std::make_unique<Sync>();
         m_windowSync->setRoot(vault.rootPath());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_windowSync.get());
+        PdfDocument::install(&engine);
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         if (!component.isReady()) {
             qWarning() << component.errorString();

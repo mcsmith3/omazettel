@@ -879,6 +879,7 @@ Rectangle {
                     if (mouse.button === Qt.RightButton) {
                         itemMenu.path = rowItem.path;
                         itemMenu.isFolder = rowItem.isFolder;
+                        itemMenu.isPdf = /\.pdf$/i.test(rowItem.path);
                         itemMenu.popup();
                         return;
                     }
@@ -895,6 +896,7 @@ Rectangle {
         id: itemMenu
         property string path: ""
         property bool isFolder: false
+        property bool isPdf: false
         ThemedMenuItem {
             text: "New note here"
             onTriggered: root.newNoteRequested(vault.folderFor(itemMenu.path))
@@ -905,12 +907,14 @@ Rectangle {
         }
         ThemedMenuItem {
             text: itemMenu.isFolder ? "Export folder…" : "Export…"
+            visible: !itemMenu.isPdf
+            height: visible ? implicitHeight : 0
             onTriggered: itemMenu.isFolder ? root.exportFolderRequested(itemMenu.path)
                                            : root.exportRequested(itemMenu.path)
         }
         ThemedMenuItem {
             text: "History…"
-            visible: !itemMenu.isFolder
+            visible: !itemMenu.isFolder && !itemMenu.isPdf
             height: visible ? implicitHeight : 0
             onTriggered: root.historyRequested(itemMenu.path)
         }

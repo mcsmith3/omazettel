@@ -59,6 +59,8 @@ run_tests build-tests-upstream tests/tests.pro tst_omazettel
 rm -rf dist
 dir="omazettel-$ver-$arch-linux"
 install -Dm755 build/omazettel "dist/$dir/bin/omazettel"
+# The PDF view's reader; OmaZettel runs without it when poppler-qt6 is missing.
+install -Dm755 build/libomazettel-pdf.so "dist/$dir/lib/omazettel/libomazettel-pdf.so"
 install -Dm644 LICENSE "dist/$dir/share/licenses/omazettel/LICENSE"
 install -Dm644 LICENSES/MIT-omawrite.txt "dist/$dir/share/licenses/omazettel/MIT-omawrite.txt"
 install -Dm644 THIRD-PARTY-NOTICES.md "dist/$dir/share/licenses/omazettel/THIRD-PARTY-NOTICES.md"

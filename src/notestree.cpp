@@ -8,7 +8,8 @@
 #include <algorithm>
 
 namespace {
-const QStringList noteSuffixes{QStringLiteral("md"), QStringLiteral("markdown")};
+// Notes, and PDFs (such as exported notes), which open in the PDF view.
+const QStringList noteSuffixes{QStringLiteral("md"), QStringLiteral("markdown"), QStringLiteral("pdf")};
 
 struct Entry {
     QString name;

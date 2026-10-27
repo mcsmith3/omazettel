@@ -25,6 +25,7 @@
 #include "exporter.h"
 #include "noteindex.h"
 #include "notetemplates.h"
+#include "pdfdocument.h"
 #include "singleinstance.h"
 #include "sync.h"
 #include "vault.h"
@@ -161,6 +162,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("citations"), &citations);
     engine.rootContext()->setContextProperty(QStringLiteral("sync"), &sync);
 
+    PdfDocument::install(&engine);
     engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Could not load the OmaZettel interface; resource available:"
@@ -206,10 +208,14 @@ int main(int argc, char *argv[]) {
             QMetaObject::invokeMethod(window, "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(files.first())));
     });
 
-    if (!launchFiles.isEmpty())
+    // A PDF shows in the PDF view, with the last note open behind it.
+    const bool launchPdf = !launchFiles.isEmpty() && launchFiles.first().endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive);
+    if (!launchFiles.isEmpty() && !launchPdf)
         backend.openOrStartFile(QUrl::fromLocalFile(launchFiles.first()));
     else if (const QString lastNote = vault.lastNotePath(); !lastNote.isEmpty())
         backend.open(QUrl::fromLocalFile(lastNote));
+    if (launchPdf)
+        QMetaObject::invokeMethod(window, "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(launchFiles.first())));
 
     return app.exec();
 }

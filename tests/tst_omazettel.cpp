@@ -27,6 +27,7 @@
 #include "exporter.h"
 #include "noteindex.h"
 #include "notetemplates.h"
+#include "pdfdocument.h"
 #include "sync.h"
 #include "vault.h"
 
@@ -63,6 +64,7 @@ private slots:
     void initTestCase() {
         QCoreApplication::setApplicationVersion(QStringLiteral("1.2.3-test"));
         QStandardPaths::setTestModeEnabled(true);
+        PdfDocument::registerType();
         QVERIFY(m_settingsDirectory.isValid());
         QQuickStyle::setStyle(QStringLiteral("Material"));
         QSettings::setDefaultFormat(QSettings::IniFormat);
