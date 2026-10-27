@@ -17,6 +17,7 @@ HEADERS += \
     src/exporter.h \
     src/noteindex.h \
     src/layout.h \
+    src/moc.h \
     src/notetemplates.h \
     src/sync.h \
     src/textdiff.h \
@@ -42,6 +43,7 @@ SOURCES += \
     src/exporter.cpp \
     src/noteindex.cpp \
     src/layout.cpp \
+    src/moc.cpp \
     src/notetemplates.cpp \
     src/sync.cpp \
     src/textdiff.cpp \

@@ -131,6 +131,7 @@ private:
     QJsonObject renameNote(const QJsonObject &args);
     QJsonObject tidyNames(const QJsonObject &args);
     QJsonObject setupLayout(const QJsonObject &args);
+    QJsonObject updateMaps(const QJsonObject &args);
     QJsonObject moveNote(const QJsonObject &args);
     QJsonObject trashNote(const QJsonObject &args);
     QJsonObject listTemplates(const QJsonObject &args);

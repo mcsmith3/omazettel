@@ -222,6 +222,13 @@ Dialog {
                 }
             }
             Small { text: "A folder that already has notes keeps its folders; omazettel setup-layout moves one to AI-first." }
+            Check {
+                objectName: "mapsOfContentCheck"
+                checked: vault.mapsOfContent
+                text: "Keep maps of content for projects"
+                onToggled: vault.mapsOfContent = !vault.mapsOfContent
+            }
+            Small { text: "In AI-first folders: 03-projects/projects-moc links a map for each project, listing its notes (not transcripts)." }
 
             // ── Export ──────────────────────────────────────────────────────
             Heading { text: "Export" }

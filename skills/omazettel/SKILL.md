@@ -40,6 +40,7 @@ omazettel tags | links                            # tag counts; broken links and
 omazettel rename <note|folder> <new name>         # rewrites [[links]]
 omazettel tidy-names [folder] [--apply]           # spaces in file names -> separator; preview first
 omazettel setup-layout [--apply]                  # older folder -> numbered layout; preview first
+omazettel maps [--apply]                          # project maps of content; kept up to date on their own
 omazettel move <note|folder> <folder>
 omazettel trash <note>
 omazettel export <note|folder> [-p PDF|Word|HTML|...] [-o file]
@@ -87,6 +88,16 @@ A notes folder with the numbered layout (`layout.numbered` in `info`):
 | `04-outputs/` | Finished work, ready to send |
 | `99-archive/` | Finished or dropped projects: `move` them here rather than `trash` |
 
+**Maps of content.** `03-projects/projects-moc` links each project's map
+(`03-projects/<project>/<project>-moc`), which lists every note in the
+project except transcripts. To get an overview of a project, `show` its map.
+OmaZettel rewrites the list between the `omazettel-map` marker comments after
+every change, so never edit inside them; write any overview above or below
+with `append` or `set-section`. Answers list any `mapsUpdated`.
+
+**Transcripts** go in `transcripts/` beside their meeting note
+(`transcribe --note` does this). Link the meeting note, not the transcript.
+
 Name files so they say when, what and how far along: date first for anything
 tied to a day (`2026-10-25-vendor-kickoff`), a status at the end for drafts
 and outputs (`2026-10-25-q4-plan-draft-v1`, then `...-final` in `04-outputs`),
@@ -103,7 +114,8 @@ organise their notes.
 When the person just wants the note, one command does it all: OmaZettel
 transcribes, then the person's own AI (Omarchy's default agent, or `--ai`)
 writes the Meeting note: summary, Agenda, Notes, Decisions and Action items.
-The transcript goes in a separate linked note beside it (`<meeting>-transcript`).
+The transcript goes in a separate linked note in a `transcripts/` folder beside it
+(`transcripts/<meeting>-transcript`).
 
 ```sh
 omazettel transcribe ~/Downloads/standup.vtt --note --json        # AI picks the title

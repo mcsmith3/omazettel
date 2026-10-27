@@ -3,6 +3,7 @@
 #include "assistant.h"
 #include "exporter.h"
 #include "layout.h"
+#include "moc.h"
 #include "sync.h"
 #include "transcriber.h"
 #include "vault.h"
@@ -395,10 +396,17 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
         {QStringLiteral("setup_layout"), QStringLiteral("setup-layout"),
          QStringLiteral("Gives the notes folder the numbered layout: 01-system (SYSTEM-RULES.md, HOW-I-WORK.md), "
                         "02-context, 03-projects, 04-outputs, 99-archive. Moves the older Daily, Meetings, "
-                        "Literature and Archive folders into it, points the note templates there and keeps "
-                        "[[links]] working. Never overwrites a file. Shows the plan unless apply is set."),
+                        "Literature and Archive folders into it, puts transcript notes in a transcripts folder beside "
+                        "their meeting notes, points the note templates there and keeps [[links]] working. Never overwrites a file. Shows the plan unless apply is set."),
          {{QStringLiteral("apply"), QStringLiteral("boolean"), QStringLiteral("Make the changes (default: only show what would change)")}},
          false, false, &NotesApi::setupLayout},
+        {QStringLiteral("update_maps"), QStringLiteral("maps"),
+         QStringLiteral("Brings the maps of content up to date: 03-projects/projects-moc links each project's "
+                        "map, and each project's map (03-projects/<project>/<project>-moc) links every note in "
+                        "that project except transcripts. OmaZettel keeps them current on its own after every "
+                        "change; this shows which would change, and writes them when apply is set."),
+         {{QStringLiteral("apply"), QStringLiteral("boolean"), QStringLiteral("Write the maps (default: only show which would change)")}},
+         false, false, &NotesApi::updateMaps},
         {QStringLiteral("move_note"), QStringLiteral("move"),
          QStringLiteral("Moves a note or folder into another folder (made if missing) and rewrites [[links]] "
                         "that name it by path."),
@@ -441,7 +449,7 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
                         "video) are transcribed on this computer with Voxtype or whisper.cpp; voxtype:latest "
                         "imports Voxtype's last recorded meeting. With note, an AI (Omarchy's default agent, or "
                         "the one named by ai) then writes a meeting note from it: agenda, notes, decisions and "
-                        "action items, with the transcript in a linked note of its own."),
+                        "action items, with the transcript in a linked note of its own in a transcripts folder beside it."),
          {{QStringLiteral("file"), QStringLiteral("string"), QStringLiteral("The recording or transcript, or voxtype:latest"), false, true},
           {QStringLiteral("note"), QStringLiteral("string"), QStringLiteral("Write a meeting note, with this title (empty: the AI picks one)"), false, false, true},
           {QStringLiteral("ai"), QStringLiteral("string"), QStringLiteral("The AI that writes the note: claude, codex, gemini, opencode, ollama:<model>, anthropic[:<model>], openai:<model>, or none for the transcript alone (default: see omazettel ai)")},
@@ -548,8 +556,23 @@ QJsonObject NotesApi::call(const Tool &tool, const QJsonObject &arguments) {
         fail(QStringLiteral("No notes folder is open."));
     refreshIndex();
     QJsonObject result = tool.run(*this, arguments);
-    if (!tool.readOnly)
+    if (!tool.readOnly) {
+        // Notes made, moved or removed: the maps of content follow.
+        // A preview (a tool with apply, called without it) writes nothing.
+        bool preview = false;
+        for (const Param &param : tool.params)
+            preview = preview || (param.name == QLatin1String("apply") && !arguments.value(QStringLiteral("apply")).toBool());
+        if (Moc::enabled() && !preview && tool.name != QLatin1String("update_maps")) {
+            QJsonArray maps;
+            for (const QString &map : Moc::update(m_root)) {
+                m_index.updateFile(QDir(m_root).filePath(map));
+                maps.append(map);
+            }
+            if (!maps.isEmpty())
+                result.insert(QStringLiteral("mapsUpdated"), maps);
+        }
         m_lastScan = 0;
+    }
     return result;
 }
 
@@ -1544,6 +1567,34 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
         lines.append(QStringLiteral("  move %1/ -> %2/").arg(relative(from), move.to));
     }
 
+    // Transcripts go in a transcripts folder beside their meeting notes.
+    QJsonArray transcripts;
+    QStringList notes;
+    for (const QVariant &entry : m_index.notes())
+        notes.append(entry.toMap().value(QStringLiteral("path")).toString());
+    std::sort(notes.begin(), notes.end());
+    for (const QString &note : std::as_const(notes)) {
+        const QString rel = relative(note);
+        if (!Moc::isTranscript(rel) || rel.contains(QLatin1String("transcripts/"), Qt::CaseInsensitive))
+            continue;
+        // Where it ends up, after the folder moves above.
+        QString target = rel;
+        for (const QJsonValue &m : std::as_const(moved)) {
+            const QString from = m.toObject().value(QStringLiteral("from")).toString() + QLatin1Char('/');
+            if (target.startsWith(from))
+                target = m.toObject().value(QStringLiteral("to")).toString() + QLatin1Char('/') + target.mid(from.size());
+        }
+        const QFileInfo info(target);
+        const QString to = (info.path() == QLatin1String(".") ? QString() : info.path() + QLatin1Char('/'))
+                           + QStringLiteral("transcripts/") + info.fileName();
+        if (QFileInfo::exists(root.filePath(to)))
+            continue;
+        if (apply)
+            relocate(root.filePath(target), root.filePath(to));
+        transcripts.append(QJsonObject{{QStringLiteral("from"), target}, {QStringLiteral("to"), to}});
+        lines.append(QStringLiteral("  move %1 -> %2").arg(target, to));
+    }
+
     // 2. The folders and rules files that are missing.
     QJsonArray made;
     if (apply) {
@@ -1598,7 +1649,7 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
             left.append(name);
     }
 
-    const bool nothing = moved.isEmpty() && made.isEmpty() && templates.isEmpty();
+    const bool nothing = moved.isEmpty() && made.isEmpty() && templates.isEmpty() && transcripts.isEmpty();
     QString message;
     if (nothing)
         message = QStringLiteral("The notes folder already has the layout.");
@@ -1618,10 +1669,39 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
     return {{QStringLiteral("applied"), apply},
             {QStringLiteral("moved"), moved},
             {QStringLiteral("made"), made},
+            {QStringLiteral("transcripts"), transcripts},
             {QStringLiteral("templates"), templates},
             {QStringLiteral("skipped"), skipped},
             {QStringLiteral("leftInPlace"), left},
             {QStringLiteral("message"), message}};
+}
+
+QJsonObject NotesApi::updateMaps(const QJsonObject &args) {
+    const bool apply = flag(args, QStringLiteral("apply"), false);
+    if (!Layout::present(m_root))
+        return {{QStringLiteral("applied"), apply}, {QStringLiteral("maps"), QJsonArray()},
+                {QStringLiteral("message"), QStringLiteral("Maps of content are made in the AI-first layout's "
+                                                           "03-projects; this notes folder doesn't have it "
+                                                           "(omazettel setup-layout gives it one).")}};
+    QJsonArray maps;
+    for (const QString &map : Moc::update(m_root, !apply)) {
+        if (apply)
+            m_index.updateFile(QDir(m_root).filePath(map));
+        maps.append(map);
+    }
+    QStringList names;
+    for (const QJsonValue &map : std::as_const(maps))
+        names.append(QStringLiteral("  ") + map.toString());
+    QString message;
+    if (maps.isEmpty())
+        message = QStringLiteral("The maps of content are up to date.");
+    else if (apply)
+        message = QStringLiteral("Updated %1 map(s):\n%2").arg(maps.size()).arg(names.join(QLatin1Char('\n')));
+    else
+        message = QStringLiteral("Would update %1 map(s) (add --apply to write them):\n%2").arg(maps.size()).arg(names.join(QLatin1Char('\n')));
+    if (!Moc::enabled())
+        message += QStringLiteral("\nKeeping them up to date is off in Settings.");
+    return {{QStringLiteral("applied"), apply}, {QStringLiteral("maps"), maps}, {QStringLiteral("message"), message}};
 }
 
 QJsonObject NotesApi::moveNote(const QJsonObject &args) {
@@ -2050,10 +2130,14 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
         }
     }
     const QString path = QDir(m_root).filePath(result.value(QStringLiteral("path")).toString());
-    // The transcript goes in a note of its own beside the meeting note, each linking the other.
+    // The transcript goes in a note of its own, in a transcripts folder
+    // beside the meeting note, each linking the other. The meeting note is
+    // what people look for; the transcript stays out of the way.
     if (keepTranscript) {
         const QString meetingName = QFileInfo(path).completeBaseName();
-        const QString folder = QFileInfo(result.value(QStringLiteral("path")).toString()).path();
+        const QString meetingFolder = QFileInfo(result.value(QStringLiteral("path")).toString()).path();
+        const QString folder = meetingFolder == QLatin1String(".") ? QStringLiteral("transcripts")
+                                                                   : meetingFolder + QStringLiteral("/transcripts");
         QJsonObject meta{{QStringLiteral("source"), source},
                          {QStringLiteral("meeting"), QStringLiteral("[[%1]]").arg(meetingName)},
                          {QStringLiteral("tags"), QJsonArray{QStringLiteral("transcript")}}};
@@ -2063,7 +2147,7 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
         const QJsonObject made = createNote({
             {QStringLiteral("title"), meetingName + QStringLiteral(" transcript")},
             {QStringLiteral("template"), QStringLiteral("none")},
-            {QStringLiteral("folder"), folder == QLatin1String(".") ? QString() : folder},
+            {QStringLiteral("folder"), folder},
             {QStringLiteral("content"), QStringLiteral("Transcript of [[%1]], from %2.\n\n%3\n")
                                             .arg(meetingName, source, transcript.trimmed())},
             {QStringLiteral("meta"), meta},

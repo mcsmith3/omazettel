@@ -218,6 +218,20 @@ folder after this one; change it in Settings → "New, empty notes folders
 start". The command line and agents use the same setting. If nobody has
 chosen yet, they use AI-first.
 
+**Maps of content.** `03-projects/projects-moc.md` links a map for each
+project folder, such as `03-projects/vdem/vdem-moc.md`, and each project map
+links every note in that project, grouped by subfolder. Open a project's map
+to see everything in it, and its backlinks show which notes belong where.
+OmaZettel keeps the lists up to date as notes are added, moved, renamed or
+removed (in the app, by sync, or from the command line). It only rewrites the
+list between the two marker comments, so write your own overview above or
+below it. Daily notes get no map. Turn maps off in Settings, or bring them up
+to date now with `omazettel maps --apply`.
+
+**Transcripts** from `omazettel transcribe --note` go in a `transcripts/`
+folder beside the meeting note, so the summary is what you see first. The two
+notes link each other, and transcripts are left out of the maps.
+
 File names say when, what and how far along. Anything tied to a day starts with
 the date (`2026-10-25-kickoff`; the Daily and Meeting templates do this),
 drafts and outputs end with their status (`2026-10-25-q4-plan-final`), and
@@ -232,7 +246,8 @@ omazettel setup-layout --apply    # does it
 ```
 
 This moves `Daily`, `Meetings`, `Literature` and `Archive` into the layout,
-points the templates there and rewrites links to match. It adds what's
+moves transcript notes into a `transcripts/` folder beside their meeting
+notes, points the templates there and rewrites links to match. It adds what's
 missing and never overwrites a file. Other folders stay where they are, and
 it lists them; move each one with `omazettel move <folder> 02-context` (or
 `03-projects`). Empty layout folders hold a hidden `.keep` file, so sync keeps
@@ -440,6 +455,7 @@ omazettel tasks                                   # open - [ ] tasks in every no
 omazettel rename "Atlas" "Atlas Program"          # and every [[link]] to it
 omazettel tidy-names [--apply]                    # rename old "file names with spaces"
 omazettel setup-layout [--apply]                  # move an older folder to the numbered layout
+omazettel maps [--apply]                          # bring the project maps of content up to date
 omazettel export Meetings -p Word                 # a folder as one document
 omazettel sync
 ```
@@ -452,6 +468,7 @@ omazettel sync
 | `daily`, `capture` | A day's daily note; a quick timestamped line or task in today's |
 | `rename`, `move`, `trash` | Organise, rewriting links as the app does |
 | `tidy-names` | Renames older notes with spaces in their file names to the current separator, rewriting links; previews unless `--apply` |
+| `maps` | Shows which [maps of content](#folder-layout) are out of date and, with `--apply`, rewrites them (OmaZettel normally does this on its own) |
 | `setup-layout` | Gives the notes folder the [numbered layout](#folder-layout), moving the older Daily, Meetings, Literature and Archive folders in; previews unless `--apply` |
 | `export`, `sync` | Pandoc export with your profiles; git sync |
 | `transcribe` | Meeting captions (Teams, Zoom, Meet `.vtt`/`.srt`) as `Speaker: words`; `.docx` and `.txt` transcripts; recordings through Voxtype or whisper.cpp. With `--note`, an AI writes the meeting note |

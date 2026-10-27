@@ -22,6 +22,7 @@
 #include "cli.h"
 #include "mcpserver.h"
 #include "layout.h"
+#include "moc.h"
 #include "notesapi.h"
 #include "transcriber.h"
 #include "exporter.h"
@@ -2486,6 +2487,86 @@ private slots:
         QVERIFY(!dialog->property("opened").toBool());
     }
 
+    void keepsMapsOfContent() {
+        QTemporaryDir root;
+        Layout::create(root.path());
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/plan.md")), "# Plan\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/research/source-a.md")), "# A\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/2026-10-27-kickoff.md")), "# Kickoff\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/transcripts/2026-10-27-kickoff-transcript.md")), "# T\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/old-call-transcript.md")), "# T\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/beta/plan.md")), "# Beta plan\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/daily/2026-10-27.md")), "# Day\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/empty/.keep")), "");
+
+        QVERIFY(Moc::isTranscript(QStringLiteral("a/transcripts/x.md")));
+        QVERIFY(Moc::isTranscript(QStringLiteral("a/x_Transcript.md")));
+        QVERIFY(!Moc::isTranscript(QStringLiteral("a/transcription-tools.md")));
+
+        const QStringList written = Moc::update(root.path());
+        QCOMPARE(written, (QStringList{QStringLiteral("03-projects/alpha/alpha-moc.md"),
+                                       QStringLiteral("03-projects/beta/beta-moc.md"),
+                                       QStringLiteral("03-projects/projects-moc.md")}));
+        const QString alpha = readFile(root.filePath(QStringLiteral("03-projects/alpha/alpha-moc.md")));
+        QVERIFY(alpha.startsWith(QStringLiteral("---\ntitle: \"alpha: map of content\"\ntags: [moc]\n---\n")));
+        QVERIFY(alpha.contains(QStringLiteral("Up: [[projects-moc]]")));
+        // "plan" is in two projects, so it is linked by its path.
+        QVERIFY(alpha.contains(QStringLiteral("- [[2026-10-27-kickoff]]\n- [[03-projects/alpha/plan]]\n\n### research\n\n- [[source-a]]\n")));
+        QVERIFY(!alpha.contains(QStringLiteral("transcript")));
+        const QString top = readFile(root.filePath(QStringLiteral("03-projects/projects-moc.md")));
+        QVERIFY(top.contains(QStringLiteral("- [[alpha-moc]]\n- [[beta-moc]]\n<!-- /omazettel-map -->")));
+        QVERIFY(!top.contains(QStringLiteral("daily")) && !top.contains(QStringLiteral("empty")));
+
+        // Again: nothing to write. Words around the list stay.
+        QVERIFY(Moc::update(root.path()).isEmpty());
+        const QString mapPath = root.filePath(QStringLiteral("03-projects/alpha/alpha-moc.md"));
+        writeFile(mapPath, ("Start here.\n\n" + alpha + "\nMy notes.\n").toUtf8());
+        writeFile(root.filePath(QStringLiteral("03-projects/alpha/zeta.md")), "# Zeta\n");
+        QCOMPARE(Moc::update(root.path()), QStringList{QStringLiteral("03-projects/alpha/alpha-moc.md")});
+        const QString edited = readFile(mapPath);
+        QVERIFY(edited.startsWith(QStringLiteral("Start here.\n")) && edited.endsWith(QStringLiteral("\nMy notes.\n")));
+        QVERIFY(edited.contains(QStringLiteral("- [[zeta]]\n")));
+        // A note of that name without the markers is someone's own: left alone.
+        writeFile(root.filePath(QStringLiteral("03-projects/beta/beta-moc.md")), "# Mine\n");
+        writeFile(root.filePath(QStringLiteral("03-projects/beta/more.md")), "# More\n");
+        Moc::update(root.path());
+        QCOMPARE(readFile(root.filePath(QStringLiteral("03-projects/beta/beta-moc.md"))), QStringLiteral("# Mine\n"));
+
+        // The tools keep them current; a preview writes nothing.
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root.path(), &error));
+        const QJsonObject made = api.call(*NotesApi::toolNamed(QStringLiteral("create_note")),
+                                          {{QStringLiteral("title"), QStringLiteral("Risks")},
+                                           {QStringLiteral("folder"), QStringLiteral("03-projects/alpha")}});
+        QVERIFY(made.value(QStringLiteral("mapsUpdated")).toArray().contains(QStringLiteral("03-projects/alpha/alpha-moc.md")));
+        QVERIFY(readFile(mapPath).contains(QStringLiteral("- [[Risks]]\n")));
+        QFile::remove(root.filePath(QStringLiteral("03-projects/alpha/zeta.md")));
+        api.call(*NotesApi::toolNamed(QStringLiteral("setup_layout")), {});
+        QVERIFY(readFile(mapPath).contains(QStringLiteral("[[zeta]]")));
+        const QJsonObject plan = api.call(*NotesApi::toolNamed(QStringLiteral("update_maps")), {});
+        QCOMPARE(plan.value(QStringLiteral("maps")).toArray().size(), 1);
+        QVERIFY(readFile(mapPath).contains(QStringLiteral("[[zeta]]")));
+        api.call(*NotesApi::toolNamed(QStringLiteral("update_maps")), {{QStringLiteral("apply"), true}});
+        QVERIFY(!readFile(mapPath).contains(QStringLiteral("[[zeta]]")));
+        // setup_layout files a loose transcript in its transcripts folder.
+        api.call(*NotesApi::toolNamed(QStringLiteral("setup_layout")), {{QStringLiteral("apply"), true}});
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("03-projects/alpha/transcripts/old-call-transcript.md"))));
+        QVERIFY(api.call(*NotesApi::toolNamed(QStringLiteral("link_report")), {})
+                    .value(QStringLiteral("broken")).toArray().isEmpty());
+
+        // The app's notes folder follows changes on its own, unless turned off.
+        Vault vault;
+        QVERIFY(vault.openFolder(root.path()));
+        writeFile(root.filePath(QStringLiteral("03-projects/gamma/idea.md")), "# Idea\n");
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(root.filePath(QStringLiteral("03-projects/gamma/gamma-moc.md"))), 5000);
+        QTRY_VERIFY(readFile(root.filePath(QStringLiteral("03-projects/projects-moc.md"))).contains(QStringLiteral("[[gamma-moc]]")));
+        vault.setMapsOfContent(false);
+        writeFile(root.filePath(QStringLiteral("03-projects/delta/idea2.md")), "# Idea\n");
+        QTest::qWait(1500);
+        QVERIFY(!QFileInfo::exists(root.filePath(QStringLiteral("03-projects/delta/delta-moc.md"))));
+    }
+
     void setsUpTheLayoutInAnOlderFolder() {
         QTemporaryDir root;
         writeFile(root.filePath(QStringLiteral("Idea.md")), "# Idea\nFrom [[2026-01-05]] and [[Meetings/Kickoff]].\n");
@@ -2568,7 +2649,7 @@ private slots:
         QVERIFY(!text.contains(QStringLiteral("Ann: Cutover Friday?")));
         QVERIFY(text.contains(QStringLiteral("## Transcript\n\n[[%1-transcript]]\n").arg(base)));
         const QString transcriptPath = made.value(QStringLiteral("transcriptNote")).toString();
-        QCOMPARE(transcriptPath, QStringLiteral("Meetings/%1-transcript.md").arg(base));
+        QCOMPARE(transcriptPath, QStringLiteral("Meetings/transcripts/%1-transcript.md").arg(base));
         const QString transcript = readFile(root.filePath(transcriptPath));
         QVERIFY(transcript.contains(QStringLiteral("Transcript of [[%1]], from call.vtt.").arg(base)));
         QVERIFY(transcript.contains(QStringLiteral("Ann: Cutover Friday?\n\nBo: Yes, models by Thursday.\n")));
