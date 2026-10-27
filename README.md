@@ -49,6 +49,12 @@ endorsed by Omacom or the Omarchy project.
   and `[[Note|label]]`, with completion as you type `[[`. Following a link to a
   note that doesn't exist creates it. Renaming or moving a note rewrites every
   link to it.
+- **An AI-first folder layout, if you want it.** A new notes folder can start
+  with numbered folders (`01-system` for your rules for AI agents, then
+  context, projects, outputs and archive), or the traditional way with just
+  your notes. Each project gets a **map of content** that lists its notes and
+  keeps itself up to date, and meeting transcripts go in their own
+  `transcripts/` folder.
 - **A dashboard** of your writing: a year of activity day by day (like a
   contribution graph), every open task across your notes (tick them off right
   there), projects at a glance, and notes that need a look.
@@ -62,7 +68,8 @@ endorsed by Omacom or the Omarchy project.
   (Ctrl+Shift+P).
 - **Export with pandoc** to PDF, Word, OpenDocument, HTML, LaTeX and anything
   else pandoc writes, using your own templates and reference documents. Export
-  one note or a whole folder as one document.
+  one note or a whole folder as one document. PDFs in the notes folder show
+  in the sidebar and open inside OmaZettel.
 - **Citations** from a BibTeX or CSL JSON bibliography (Zotero's Better BibTeX
   works well), with `[@key]` completion and a formatted reference list on export.
 - **Git sync and version history**: sync with any git remote or a private
