@@ -33,11 +33,14 @@ jobs:
       - name: Test
         run: |
           jobs="$(sysctl -n hw.ncpu)"
+          # As bin/build does: Homebrew keeps poppler-qt6 off pkg-config's path.
+          export PKG_CONFIG_PATH="$(brew --prefix poppler-qt6)/lib/pkgconfig"
+          target="QMAKE_MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1-2)"
           status=0
           for suite in "build-tests-notes tests/notes/notes.pro tst_notes" "build-tests-upstream tests/tests.pro tst_omazettel"; do
             set -- $suite
             mkdir -p "$1"
-            (cd "$1" && qmake "$GITHUB_WORKSPACE/$2" >/dev/null && make -j"$jobs" >/dev/null)
+            (cd "$1" && qmake "$GITHUB_WORKSPACE/$2" "$target" >/dev/null && make -j"$jobs" >/dev/null)
             echo "Running $3"
             (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3" > results.txt 2>&1) || status=1
             grep -E '^(FAIL!|   Loc:|Totals)' "$1/results.txt" || true
