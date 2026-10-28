@@ -2860,6 +2860,53 @@ private slots:
         QVERIFY(note.value(QStringLiteral("exists")).toBool());
     }
 
+    void dashboardDatesNotesByTheirLastVersion() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed.");
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        Layout::create(root);
+        writeFile(root + QStringLiteral("/03-projects/alpha/plan.md"), "# Plan\n");
+        writeFile(root + QStringLiteral("/03-projects/beta/idea.md"), "# Idea\n");
+        const QDate today = QDate::currentDate();
+        const QString old = today.addDays(-40).toString(Qt::ISODate) + QStringLiteral("T10:00:00");
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("GIT_AUTHOR_DATE"), old);
+        environment.insert(QStringLiteral("GIT_COMMITTER_DATE"), old);
+        auto run = [&](const QStringList &arguments) {
+            QProcess git;
+            git.setProcessEnvironment(environment);
+            git.setWorkingDirectory(root);
+            git.start(QStringLiteral("git"), QStringList{QStringLiteral("-c"), QStringLiteral("user.name=T"),
+                                                          QStringLiteral("-c"), QStringLiteral("user.email=t@example.com")} + arguments);
+            QVERIFY(git.waitForFinished());
+            QCOMPARE(git.exitCode(), 0);
+        };
+        run({QStringLiteral("init"), QStringLiteral("-q")});
+        run({QStringLiteral("add"), QStringLiteral("-A")});
+        run({QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("Notes")});
+        // As after a fresh clone: the files were all written just now.
+        // Then beta's note is changed and not yet saved as a version.
+        writeFile(root + QStringLiteral("/03-projects/beta/idea.md"), "# Idea\n\nMore.\n");
+
+        NoteIndex index;
+        index.setRoot(root);
+        index.rescanNow();
+        const QJsonObject board = Dashboard::build(root, Dashboard::snapshot(index, root), 7, today);
+        QHash<QString, QString> last;
+        for (const QJsonValue &project : board.value(QStringLiteral("projects")).toArray())
+            last.insert(project.toObject().value(QStringLiteral("name")).toString(),
+                        project.toObject().value(QStringLiteral("lastActivity")).toString());
+        QCOMPARE(last.value(QStringLiteral("alpha")), today.addDays(-40).toString(Qt::ISODate));
+        QCOMPARE(last.value(QStringLiteral("beta")), today.toString(Qt::ISODate));
+        const QJsonArray recent = board.value(QStringLiteral("recent")).toArray();
+        QCOMPARE(recent.at(0).toObject().value(QStringLiteral("path")).toString(), QStringLiteral("03-projects/beta/idea.md"));
+        // Only beta's change falls in the last 7 days.
+        const QJsonArray days = board.value(QStringLiteral("activity")).toArray();
+        QCOMPARE(days.size(), 1);
+        QCOMPARE(days.at(0).toObject().value(QStringLiteral("edited")).toInt(), 1);
+    }
+
     void showsTheDashboard() {
         QTemporaryDir dir;
         const QString root = QFileInfo(dir.path()).canonicalFilePath();

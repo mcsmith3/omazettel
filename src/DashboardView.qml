@@ -280,8 +280,19 @@ Rectangle {
                 spacing: root.scaled(10)
                 readonly property int columns: page.width > root.scaled(560) ? 4 : 2
                 readonly property real tileWidth: Math.floor((width - spacing * (columns - 1)) / columns)
+                // Tiles match the tallest, whose label may take two lines.
+                readonly property real tileHeight: {
+                    let tallest = 0
+                    for (let i = 0; i < tileRepeater.count; ++i) {
+                        const tile = tileRepeater.itemAt(i)
+                        if (tile)
+                            tallest = Math.max(tallest, tile.contentHeight)
+                    }
+                    return tallest
+                }
 
                 Repeater {
+                    id: tileRepeater
                     model: [
                         { value: root.summary.notes, label: "notes" },
                         { value: root.summary.openTasks, label: root.summary.openTasks === 1 ? "open task" : "open tasks" },
@@ -291,8 +302,9 @@ Rectangle {
                     ]
                     delegate: Card {
                         required property var modelData
+                        readonly property real contentHeight: tileColumn.implicitHeight + root.scaled(20)
                         width: tiles.tileWidth
-                        height: tileColumn.implicitHeight + root.scaled(20)
+                        height: Math.max(contentHeight, tiles.tileHeight)
                         Column {
                             id: tileColumn
                             x: root.scaled(12)

@@ -216,9 +216,6 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
         if (!Moc::isMap(note.path))
             paths.append(note.path);
     }
-    std::sort(paths.begin(), paths.end(), [&info](const QString &a, const QString &b) {
-        return info.value(a).modified > info.value(b).modified;
-    });
     auto titleOf = [&info](const QString &path) {
         return info.contains(path) ? info.value(path).title : QFileInfo(path).completeBaseName();
     };
@@ -237,8 +234,10 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
     };
 
     QString history = QStringLiteral("files");
+    // The whole history, not just the days shown: a note's last version
+    // says when it last changed, where the file's date only says when git
+    // last wrote it (a fresh clone or a pull makes every note look new).
     const QString log = git(root, {QStringLiteral("-c"), QStringLiteral("core.quotePath=false"), QStringLiteral("log"),
-                                   QStringLiteral("--since=%1T00:00:00").arg(first.toString(Qt::ISODate)),
                                    QStringLiteral("--format=%x01%aI"), QStringLiteral("--name-status"),
                                    QStringLiteral("-z"), QStringLiteral("--relative"), QStringLiteral("--"),
                                    QStringLiteral(".")});
@@ -252,14 +251,17 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
         // under the old name, which then count for the note as it is named now.
         QHash<QString, QString> renamed;
         auto current = [&renamed](const QString &path) { return renamed.value(path, path); };
+        QHash<QString, QDateTime> saved; // Each note's newest version.
         const QStringList tokens = log.split(QLatin1Char('\0'));
+        QDateTime when;
         QDate day;
         for (int i = 0; i < tokens.size(); ++i) {
             const QString token = tokens.at(i).trimmed();
             if (token.isEmpty())
                 continue;
             if (token.startsWith(QChar(1))) {
-                day = QDateTime::fromString(token.mid(1), Qt::ISODate).toLocalTime().date();
+                when = QDateTime::fromString(token.mid(1), Qt::ISODate);
+                day = when.toLocalTime().date();
                 continue;
             }
             const QChar status = token.at(0);
@@ -271,9 +273,13 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
                     renamed.insert(from, to);
                 else
                     mark(day, to, true);
+                if (!saved.contains(to))
+                    saved.insert(to, when);
                 continue;
             }
             const QString path = current(tokens.value(++i));
+            if (status != QLatin1Char('D') && !saved.contains(path))
+                saved.insert(path, when);
             if (status == QLatin1Char('A'))
                 mark(day, path, true);
             else if (status == QLatin1Char('M'))
@@ -300,10 +306,16 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
             const Info note = info.value(path);
             if (!info.contains(path))
                 continue;
+            saved.remove(path); // Changed since its last version: the file's date is right.
             if (code == QLatin1String("??") || code.contains(QLatin1Char('A')))
                 mark((note.born.isValid() ? note.born : note.modified).toLocalTime().date(), path, true);
             else
                 mark(note.modified.toLocalTime().date(), path, false);
+        }
+        for (auto note = info.begin(); note != info.end(); ++note) {
+            const QDateTime last = saved.value(note.key());
+            if (last.isValid())
+                note->modified = last;
         }
     } else {
         // No history: when each note was made (where the file system knows)
@@ -315,6 +327,10 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
             mark(note.modified.toLocalTime().date(), path, false);
         }
     }
+
+    std::sort(paths.begin(), paths.end(), [&info](const QString &a, const QString &b) {
+        return info.value(a).modified > info.value(b).modified;
+    });
 
     QJsonArray activity;
     for (auto day = touched.cbegin(); day != touched.cend(); ++day) {
