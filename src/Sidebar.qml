@@ -41,6 +41,7 @@ Rectangle {
     signal chooseFolderRequested()
     signal moveRequested(string path, string folder)
     signal dailyNoteRequested()
+    signal dashboardRequested()
     signal exportRequested(string path)
     signal exportFolderRequested(string path)
     signal citationsRequested()
@@ -140,6 +141,17 @@ Rectangle {
             font.family: Qt.application.font.family
             font.pixelSize: root.scaled(13)
             font.bold: true
+        }
+
+        IconButton {
+            objectName: "dashboardButton"
+            visible: vault.isOpen
+            iconName: "dashboard"
+            iconColor: root.mutedColor
+            hoverColor: root.textColor
+            textScale: root.textScale
+            tooltip: "Dashboard (Ctrl+Shift+H)"
+            onClicked: root.dashboardRequested()
         }
 
         IconButton {

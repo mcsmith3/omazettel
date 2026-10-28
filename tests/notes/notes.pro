@@ -23,6 +23,7 @@ SOURCES += \
     ../../src/exporter.cpp \
     ../../src/noteindex.cpp \
     ../../src/layout.cpp \
+    ../../src/dashboard.cpp \
     ../../src/moc.cpp \
     ../../src/notetemplates.cpp \
     ../../src/sync.cpp \
@@ -46,6 +47,7 @@ HEADERS += \
     ../../src/exporter.h \
     ../../src/noteindex.h \
     ../../src/layout.h \
+    ../../src/dashboard.h \
     ../../src/moc.h \
     ../../src/notetemplates.h \
     ../../src/sync.h \

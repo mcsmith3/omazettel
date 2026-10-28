@@ -47,7 +47,12 @@ Item {
             ctx.lineJoin = "round";
             ctx.beginPath();
             var name = control.iconName;
-            if (name === "note-plus") {
+            if (name === "dashboard") {
+                ctx.rect(2.5, 2.5, 4.5, 5.5);
+                ctx.rect(9, 2.5, 4.5, 3);
+                ctx.rect(9, 7.5, 4.5, 6);
+                ctx.rect(2.5, 10, 4.5, 3.5);
+            } else if (name === "note-plus") {
                 ctx.moveTo(9.5, 2.5); ctx.lineTo(3.5, 2.5); ctx.lineTo(3.5, 13.5);
                 ctx.lineTo(8, 13.5);
                 ctx.moveTo(9.5, 2.5); ctx.lineTo(12.5, 5.5); ctx.lineTo(12.5, 8);

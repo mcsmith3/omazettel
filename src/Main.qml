@@ -98,15 +98,19 @@ ApplicationWindow {
     // have saved it anyway, and asks only when it would not.
     // A PDF in the notes folder shown in place of the editor; "" for none.
     property string pdfPath: ""
+    // The dashboard shown in place of the editor.
+    property bool dashboardOpen: false
 
     function openNote(url) {
         var path = vault.pathForUrl(url);
         if (/\.pdf$/i.test(path)) {
             pdfPath = path;
+            dashboardOpen = false;
             return;
         }
         if (path === currentPath()) {
             pdfPath = "";
+            dashboardOpen = false;
             return;
         }
         if (!navigatingHistory && currentPath().length > 0) {
@@ -126,6 +130,7 @@ ApplicationWindow {
     function openFromLaunch(url) {
         if (/\.pdf$/i.test(vault.pathForUrl(url))) {
             pdfPath = vault.pathForUrl(url);
+            dashboardOpen = false;
             return;
         }
         if (vault.pathForUrl(url) === currentPath())
@@ -193,6 +198,49 @@ ApplicationWindow {
         openNote(vault.urlForPath(path));
         if (currentPath() === path)
             showPosition(position, length);
+    }
+
+    // ── Dashboard ───────────────────────────────────────────────────────────
+
+    function toggleDashboard() {
+        if (dashboardOpen || !vault.isOpen) {
+            dashboardOpen = false;
+            return;
+        }
+        backend.flushAutoSave();
+        pdfPath = "";
+        dashboardOpen = true;
+    }
+
+    function dashboardPath(relative) {
+        return vault.rootPath + "/" + relative;
+    }
+
+    // Ticks off a task from the dashboard. In the open note it changes the
+    // editor's text, so it saves like any edit (and can be undone); in other
+    // notes it changes the file.
+    function completeDashboardTask(task) {
+        if (dashboardPath(task.path) !== currentPath()) {
+            var error = dashboard.completeTask(task.path, task.line, task.text);
+            if (error.length > 0)
+                backend.showStatus(error);
+            return;
+        }
+        var lines = editor.text.split("\n");
+        var line = lines[task.line - 1];
+        var match = line !== undefined ? /^(\s*(?:[-*+]|\d+[.)])\s+\[) \]/.exec(line) : null;
+        if (!match || line.trim().slice(-task.text.length) !== task.text) {
+            backend.showStatus("The task has changed since the dashboard was drawn; it shows the note as it is now.");
+            dashboard.refresh();
+            return;
+        }
+        var position = match[1].length;
+        for (var i = 0; i < task.line - 1; ++i)
+            position += lines[i].length + 1;
+        editor.remove(position, position + 1);
+        editor.insert(position, "x");
+        backend.flushAutoSave();
+        dashboard.refresh();
     }
 
     function showNotesSearch() {
@@ -520,6 +568,7 @@ ApplicationWindow {
         var all = [
             { id: "newNote", name: "New note", title: "Ctrl+N", when: hasFolder },
             { id: "daily", name: "Today's daily note", title: "Ctrl+Shift+D", when: hasFolder },
+            { id: "dashboard", name: "Dashboard: activity, open tasks and projects", title: "Ctrl+Shift+H", when: hasFolder },
             { id: "newFolder", name: "New folder", title: "", when: hasFolder },
             { id: "goto", name: "Go to note", title: "Ctrl+O", when: hasFolder },
             { id: "search", name: "Search all notes", title: "Ctrl+Shift+F", when: hasFolder },
@@ -559,6 +608,7 @@ ApplicationWindow {
         switch (id) {
         case "newNote": newNote(folder); break;
         case "daily": openDailyNote(); break;
+        case "dashboard": toggleDashboard(); break;
         case "newFolder": newFolder(folder); break;
         case "goto": quickSwitcher.open(); break;
         case "search": showNotesSearch(); break;
@@ -896,6 +946,11 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+Shift+H"
+        onActivated: win.toggleDashboard()
+    }
+
+    Shortcut {
         sequence: "Ctrl+Shift+B"
         onActivated: vault.panelVisible = !vault.panelVisible
     }
@@ -1121,6 +1176,7 @@ ApplicationWindow {
         onTrashRequested: function(path) { win.trashItem(path); }
         onMoveRequested: function(path, folder) { win.moveItem(path, folder); }
         onDailyNoteRequested: win.openDailyNote()
+        onDashboardRequested: win.toggleDashboard()
         onExportRequested: function(path) { win.exportNote(path); }
         onExportFolderRequested: function(path) { exportDialog.openForFolder(path, noteTemplates.author); }
         onCitationsRequested: citationsDialog.open()
@@ -1176,10 +1232,45 @@ ApplicationWindow {
         onCloseRequested: win.pdfPath = ""
     }
 
+    DashboardView {
+        id: dashboardView
+        anchors.fill: parent
+        anchors.leftMargin: win.sidebarWidth
+        anchors.rightMargin: win.panelWidth
+        z: 6
+        open: win.dashboardOpen && vault.isOpen
+        darkMode: win.darkMode
+        textScale: win.textScale
+        pageColor: win.pageColor
+        textColor: win.textColor
+        mutedColor: win.mutedColor
+        accentColor: backend.themeAccent
+        raisedColor: win.raisedColor
+        fieldColor: win.fieldColor
+        borderColor: win.borderColor
+        onCloseRequested: win.dashboardOpen = false
+        onNoteRequested: function(path) { win.openNote(vault.urlForPath(win.dashboardPath(path))); }
+        onTaskRequested: function(task) { win.openSearchResult(win.dashboardPath(task.path), task.position, task.length); }
+        onTaskCompleted: function(task) { win.completeDashboardTask(task); }
+        onTagRequested: function(tag) {
+            vault.sidebarVisible = true;
+            sidebar.showTag(tag);
+        }
+    }
+
+    Binding {
+        target: dashboard
+        property: "active"
+        value: dashboardView.visible
+    }
+
     Connections {
         target: backend
         // A note opened (from a link, history or search): it takes the middle.
-        function onFileUrlChanged() { win.pdfPath = ""; }
+        function onFileUrlChanged() {
+            win.pdfPath = "";
+            win.dashboardOpen = false;
+        }
     }
 
     ExportDialog {

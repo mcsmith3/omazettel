@@ -24,6 +24,7 @@
 #include "backend.h"
 #include "markdownhighlighter.h"
 #include "citations.h"
+#include "dashboard.h"
 #include "exporter.h"
 #include "noteindex.h"
 #include "notetemplates.h"
@@ -80,6 +81,7 @@ private slots:
         m_exporter = std::make_unique<Exporter>();
         m_citations = std::make_unique<Citations>();
         m_sync = std::make_unique<Sync>();
+        m_dashboard = std::make_unique<Dashboard>(nullptr);
     }
 
     void countsWords() {
@@ -281,6 +283,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -309,6 +312,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -362,6 +366,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -446,6 +451,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -495,6 +501,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -568,6 +575,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -622,6 +630,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -674,6 +683,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -716,6 +726,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -746,6 +757,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -778,6 +790,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -828,6 +841,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -912,6 +926,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -996,6 +1011,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -1081,6 +1097,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -1681,6 +1698,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -1877,6 +1895,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -1950,6 +1969,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -1998,6 +2018,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2034,6 +2055,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2070,6 +2092,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -2117,6 +2140,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -2199,6 +2223,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -2353,6 +2378,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -2586,6 +2612,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2656,6 +2683,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2699,6 +2727,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -2738,6 +2767,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2783,6 +2813,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -2821,6 +2852,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QScopedPointer<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
@@ -3197,6 +3229,7 @@ private slots:
         engine.rootContext()->setContextProperty(QStringLiteral("exporter"), m_exporter.get());
         engine.rootContext()->setContextProperty(QStringLiteral("citations"), m_citations.get());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_sync.get());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_dashboard.get());
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> window(component.create());
@@ -3676,6 +3709,7 @@ private:
     std::unique_ptr<Exporter> m_exporter;
     std::unique_ptr<Citations> m_citations;
     std::unique_ptr<Sync> m_sync;
+    std::unique_ptr<Dashboard> m_dashboard;
 };
 
 QTEST_MAIN(OmaZettelTest)

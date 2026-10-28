@@ -29,6 +29,7 @@ endorsed by Omacom or the Omarchy project.
 - [Links, backlinks and tags](#links-backlinks-and-tags)
 - [Note templates](#note-templates)
 - [Search and outline](#search-and-outline)
+- [Dashboard](#dashboard)
 - [Export](#export)
 - [Citations](#citations)
 - [Sync and history](#sync-and-history)
@@ -48,6 +49,15 @@ endorsed by Omacom or the Omarchy project.
   and `[[Note|label]]`, with completion as you type `[[`. Following a link to a
   note that doesn't exist creates it. Renaming or moving a note rewrites every
   link to it.
+- **An AI-first folder layout, if you want it.** A new notes folder can start
+  with numbered folders (`01-system` for your rules for AI agents, then
+  context, projects, outputs and archive), or the traditional way with just
+  your notes. Each project gets a **map of content** that lists its notes and
+  keeps itself up to date, and meeting transcripts go in their own
+  `transcripts/` folder.
+- **A dashboard** of your writing: a year of activity day by day (like a
+  contribution graph), every open task across your notes (tick them off right
+  there), projects at a glance, and notes that need a look.
 - **Backlinks, tags and an outline** for the open note in a side panel, and a
   Tags view of the whole folder.
 - **Note templates** (Note, Meeting, Daily, Literature note, or your own) with
@@ -58,7 +68,8 @@ endorsed by Omacom or the Omarchy project.
   (Ctrl+Shift+P).
 - **Export with pandoc** to PDF, Word, OpenDocument, HTML, LaTeX and anything
   else pandoc writes, using your own templates and reference documents. Export
-  one note or a whole folder as one document.
+  one note or a whole folder as one document. PDFs in the notes folder show
+  in the sidebar and open inside OmaZettel.
 - **Citations** from a BibTeX or CSL JSON bibliography (Zotero's Better BibTeX
   works well), with `[@key]` completion and a formatted reference list on export.
 - **Git sync and version history**: sync with any git remote or a private
@@ -326,6 +337,35 @@ tags: [meeting]
 - The **outline** in the right panel follows your headings as you type and
   marks the section you're in; click one to go there.
 
+## Dashboard
+
+**Ctrl+Shift+H**, the grid button at the top of the sidebar, or "Dashboard" in
+the command palette shows an overview of the notes folder in place of the
+editor. Click a note, or press Esc, to go back to writing.
+
+- **Activity**: a square for each day of the past year, darker the more notes
+  you made or changed. Hover over a day for its numbers, or click it to list
+  its notes. With [Sync and history](#sync-and-history) on, the days come from
+  the version history; without it, from file dates, which only know when a
+  note was made and last changed. Above it are counts of notes, open tasks,
+  days written in a row and new notes this week.
+- **Projects**: each project in `03-projects` (or, without the
+  [folder layout](#folder-layout), each top-level folder) with its notes, open
+  tasks and when it last changed. Click one to open its map of content.
+- **Open tasks**: every `- [ ]` task in your notes, grouped by note, newest
+  notes first. Click the box to tick it off (in the note open in the editor
+  this is an ordinary edit, so Ctrl+Z undoes it), or the task to open its note
+  there. Type in the filter to show only tasks with a name, word or project in
+  them, such as everything assigned to you.
+- **Needs a look**: links to notes that don't exist, notes no other note links
+  to (links from maps of content don't count; daily notes, transcripts, the
+  archive and `01-system` are left out), and notes with nothing written in them.
+- **Top tags** (click one for its notes) and **recently changed** notes.
+
+The same overview is on the command line as `omazettel dashboard`, so an AI
+assistant can answer "what did I work on this week?" or "what's open on the
+vdem project?".
+
 ## Export
 
 ![The export dialog](docs/screenshots/export.png)
@@ -462,6 +502,7 @@ omazettel append "Vendor kickoff" "- [ ] Send the contract" -s "Action items"
 omazettel capture "Call the bank"                 # to today's daily note, under Log
 omazettel daily yesterday                         # or a date, or -3
 omazettel tasks                                   # open - [ ] tasks in every note
+omazettel dashboard [--days 30]                   # activity, open tasks, projects, notes needing a look
 omazettel rename "Atlas" "Atlas Program"          # and every [[link]] to it
 omazettel tidy-names [--apply]                    # rename old "file names with spaces"
 omazettel setup-layout [--apply]                  # move an older folder to the numbered layout
@@ -474,6 +515,7 @@ omazettel sync
 | --- | --- |
 | `info` | The notes folder, templates, export profiles, sync and transcription status, and the folder layout with your `01-system` rules for agents |
 | `list`, `search`, `show`, `tags`, `tasks`, `links` | Find and read: by folder, tag or date; full text; one note with its links and backlinks; tags; open tasks; broken links and orphans |
+| `dashboard` | What the app's [dashboard](#dashboard) shows: notes made and changed each day, the streak, open tasks, projects, notes needing a look, top tags and recent notes |
 | `new`, `append`, `set-section`, `set-meta`, `write` | Write: a note from a template (filling its sections and header), add under a heading, replace a section, change header fields, replace a note |
 | `daily`, `capture` | A day's daily note; a quick timestamped line or task in today's |
 | `rename`, `move`, `trash` | Organise, rewriting links as the app does |
@@ -608,6 +650,7 @@ Press **F1** in the app for the full list.
 | Ctrl+, | Settings |
 | Ctrl+N | New note (from a template) |
 | Ctrl+Shift+D | Today's daily note |
+| Ctrl+Shift+H | Dashboard |
 | Ctrl+O | Go to note |
 | Ctrl+Shift+F | Search all notes |
 | Ctrl+F / Ctrl+H | Find / find and replace in the note |

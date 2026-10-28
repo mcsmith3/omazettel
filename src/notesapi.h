@@ -128,6 +128,7 @@ private:
     QJsonObject listTags(const QJsonObject &args);
     QJsonObject listTasks(const QJsonObject &args);
     QJsonObject linkReport(const QJsonObject &args);
+    QJsonObject dashboard(const QJsonObject &args);
     QJsonObject renameNote(const QJsonObject &args);
     QJsonObject tidyNames(const QJsonObject &args);
     QJsonObject setupLayout(const QJsonObject &args);

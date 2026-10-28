@@ -22,6 +22,7 @@
 #include "backend.h"
 #include "citations.h"
 #include "cli.h"
+#include "dashboard.h"
 #include "mcpserver.h"
 #include "layout.h"
 #include "moc.h"
@@ -2679,6 +2680,253 @@ private slots:
         QCOMPARE(QFileInfo(vault.renamePath(pdf, QStringLiteral("final plan"))).fileName(), QStringLiteral("final-plan.pdf"));
     }
 
+    void buildsTheDashboard() {
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        Layout::create(root);
+        const QDate today = QDate::currentDate();
+        const bool haveGit = !QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty();
+        // Saves files as a version made on day.
+        auto commit = [&root](const QStringList &files, const QDate &day) {
+            QProcess git;
+            git.setWorkingDirectory(root);
+            QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+            const QString when = day.toString(Qt::ISODate) + QStringLiteral("T12:00:00");
+            env.insert(QStringLiteral("GIT_AUTHOR_DATE"), when);
+            env.insert(QStringLiteral("GIT_COMMITTER_DATE"), when);
+            git.setProcessEnvironment(env);
+            git.start(QStringLiteral("git"), QStringList{QStringLiteral("add"), QStringLiteral("--")} + files);
+            git.waitForFinished();
+            git.start(QStringLiteral("git"), {QStringLiteral("-c"), QStringLiteral("user.name=Test"), QStringLiteral("-c"),
+                                              QStringLiteral("user.email=test@example.com"), QStringLiteral("commit"),
+                                              QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("notes")});
+            git.waitForFinished();
+            return git.exitCode() == 0;
+        };
+        const QString kickoff = QStringLiteral("03-projects/alpha/kickoff.md");
+        const QString plan = QStringLiteral("03-projects/alpha/plan.md");
+        writeFile(root + QLatin1Char('/') + kickoff, "# Kickoff\n");
+        if (haveGit) {
+            QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), root});
+            QVERIFY(commit({kickoff}, today.addDays(-3)));
+        }
+        writeFile(root + QLatin1Char('/') + kickoff, "# Kickoff\n\n#work\n\n1. [ ] Write minutes\n");
+        writeFile(root + QLatin1Char('/') + plan,
+                  "---\ntags: [alpha, work]\n---\n# Plan\n\nSee [[kickoff]] and [[missing note]].\n\n"
+                  "- [ ] Send the deck\n- [x] Book the room\n```\n- [ ] not a task\n```\n");
+        if (haveGit)
+            QVERIFY(commit({kickoff, plan}, today.addDays(-1)));
+        writeFile(root + QStringLiteral("/03-projects/alpha/transcripts/kickoff-transcript.md"), "- [ ] said in passing\n");
+        writeFile(root + QStringLiteral("/03-projects/beta/idea.md"), "---\ntitle: Idea\n---\n# Idea\n\n## Notes\n\n- \n");
+        writeFile(root + QStringLiteral("/03-projects/daily/day.md"), "# Day\n");
+        Moc::update(root);
+
+        NoteIndex index;
+        index.setRoot(root);
+        index.rescanNow();
+        const QJsonObject board = Dashboard::build(root, Dashboard::snapshot(index, root), 30, today);
+        QCOMPARE(board.value(QStringLiteral("today")).toString(), today.toString(Qt::ISODate));
+        QCOMPARE(board.value(QStringLiteral("from")).toString(), today.addDays(-29).toString(Qt::ISODate));
+
+        // Activity, day by day; the maps OmaZettel writes do not count.
+        QHash<QString, QJsonObject> days;
+        for (const QJsonValue &day : board.value(QStringLiteral("activity")).toArray())
+            days.insert(day.toObject().value(QStringLiteral("date")).toString(), day.toObject());
+        const QJsonObject summary = board.value(QStringLiteral("summary")).toObject();
+        if (haveGit) {
+            QCOMPARE(board.value(QStringLiteral("history")).toString(), QStringLiteral("git"));
+            const QJsonObject threeAgo = days.value(today.addDays(-3).toString(Qt::ISODate));
+            QCOMPARE(threeAgo.value(QStringLiteral("created")).toInt(), 1);
+            QCOMPARE(threeAgo.value(QStringLiteral("notes")).toArray().at(0).toObject().value(QStringLiteral("path")).toString(), kickoff);
+            const QJsonObject yesterday = days.value(today.addDays(-1).toString(Qt::ISODate));
+            QCOMPARE(yesterday.value(QStringLiteral("created")).toInt(), 1);
+            QCOMPARE(yesterday.value(QStringLiteral("edited")).toInt(), 1);
+            QVERIFY(!days.contains(today.addDays(-2).toString(Qt::ISODate)));
+            QCOMPARE(summary.value(QStringLiteral("streak")).toInt(), 2);
+        } else {
+            QCOMPARE(board.value(QStringLiteral("history")).toString(), QStringLiteral("files"));
+        }
+        // Notes not saved as a version yet count on the day they were made.
+        const QJsonArray todays = days.value(today.toString(Qt::ISODate)).value(QStringLiteral("notes")).toArray();
+        QVERIFY(std::any_of(todays.begin(), todays.end(), [](const QJsonValue &note) {
+            return note.toObject().value(QStringLiteral("path")).toString() == QLatin1String("03-projects/beta/idea.md");
+        }));
+        for (const QJsonValue &day : board.value(QStringLiteral("activity")).toArray()) {
+            for (const QJsonValue &note : day.toObject().value(QStringLiteral("notes")).toArray())
+                QVERIFY(!note.toObject().value(QStringLiteral("path")).toString().endsWith(QLatin1String("-moc.md")));
+        }
+
+        // Open tasks: not done ones, not in code, not in transcripts.
+        const QJsonArray tasks = board.value(QStringLiteral("tasks")).toArray();
+        QCOMPARE(tasks.size(), 2);
+        QCOMPARE(summary.value(QStringLiteral("openTasks")).toInt(), 2);
+        QStringList texts;
+        for (const QJsonValue &value : tasks) {
+            const QJsonObject task = value.toObject();
+            texts.append(task.value(QStringLiteral("text")).toString());
+            QCOMPARE(task.value(QStringLiteral("project")).toString(), QStringLiteral("alpha"));
+            // Where the editor shows it.
+            const QString text = readFile(root + QLatin1Char('/') + task.value(QStringLiteral("path")).toString());
+            QCOMPARE(text.mid(task.value(QStringLiteral("position")).toInt(), task.value(QStringLiteral("length")).toInt()),
+                     task.value(QStringLiteral("text")).toString());
+        }
+        texts.sort();
+        QCOMPARE(texts, (QStringList{QStringLiteral("Send the deck"), QStringLiteral("Write minutes")}));
+
+        // Projects, without the daily notes; transcripts do not count.
+        const QJsonArray projects = board.value(QStringLiteral("projects")).toArray();
+        QCOMPARE(board.value(QStringLiteral("projectsAre")).toString(), QStringLiteral("projects"));
+        QCOMPARE(projects.size(), 2);
+        const QJsonObject alpha = projects.at(0).toObject();
+        QCOMPARE(alpha.value(QStringLiteral("name")).toString(), QStringLiteral("alpha"));
+        QCOMPARE(alpha.value(QStringLiteral("notes")).toInt(), 2);
+        QCOMPARE(alpha.value(QStringLiteral("openTasks")).toInt(), 2);
+        QCOMPARE(alpha.value(QStringLiteral("map")).toString(), QStringLiteral("03-projects/alpha/alpha-moc.md"));
+        QCOMPARE(projects.at(1).toObject().value(QStringLiteral("name")).toString(), QStringLiteral("beta"));
+
+        // Notes that need a look.
+        const QJsonObject attention = board.value(QStringLiteral("attention")).toObject();
+        const QJsonArray broken = attention.value(QStringLiteral("broken")).toArray();
+        QCOMPARE(broken.size(), 1);
+        QCOMPARE(broken.at(0).toObject().value(QStringLiteral("target")).toString(), QStringLiteral("missing note"));
+        auto pathsOf = [](const QJsonArray &list) {
+            QStringList paths;
+            for (const QJsonValue &value : list)
+                paths.append(value.toObject().value(QStringLiteral("path")).toString());
+            paths.sort();
+            return paths;
+        };
+        // A link from a map does not count; daily notes, transcripts and the
+        // rules for agents are never listed.
+        QCOMPARE(pathsOf(attention.value(QStringLiteral("unlinked")).toArray()),
+                 (QStringList{QStringLiteral("03-projects/alpha/plan.md"), QStringLiteral("03-projects/beta/idea.md")}));
+        QCOMPARE(pathsOf(attention.value(QStringLiteral("empty")).toArray()),
+                 (QStringList{QStringLiteral("03-projects/beta/idea.md"), QStringLiteral("03-projects/daily/day.md")}));
+
+        // Tags from the notes, not the maps' #moc.
+        const QJsonArray tags = board.value(QStringLiteral("tags")).toArray();
+        QHash<QString, int> tagCounts;
+        for (const QJsonValue &tag : tags)
+            tagCounts.insert(tag.toObject().value(QStringLiteral("tag")).toString(), tag.toObject().value(QStringLiteral("count")).toInt());
+        QCOMPARE(tagCounts.value(QStringLiteral("work")), 2);
+        QCOMPARE(tagCounts.value(QStringLiteral("alpha")), 1);
+        QVERIFY(!tagCounts.contains(QStringLiteral("moc")));
+        QVERIFY(board.value(QStringLiteral("recent")).toArray().size() > 0);
+
+        // Ticking off a task, only while the line still holds it.
+        QCOMPARE(Dashboard::tickTask(QStringLiteral("a\n  - [ ] Send the deck\n"), 2, QStringLiteral("Send the deck")),
+                 QStringLiteral("a\n  - [x] Send the deck\n"));
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send it\n"), 1, QStringLiteral("Send the deck")).isEmpty());
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [x] Send the deck\n"), 1, QStringLiteral("Send the deck")).isEmpty());
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send the deck\n"), 4, QStringLiteral("Send the deck")).isEmpty());
+
+        Dashboard dashboard(&index);
+        dashboard.setRoot(root);
+        dashboard.setActive(true);
+        QTRY_VERIFY(dashboard.data().contains(QStringLiteral("summary")) && !dashboard.loading());
+        QCOMPARE(dashboard.completeTask(plan, 8, QStringLiteral("Send the deck")), QString());
+        QVERIFY(readFile(root + QLatin1Char('/') + plan).contains(QStringLiteral("- [x] Send the deck\n")));
+        QVERIFY(!dashboard.completeTask(plan, 8, QStringLiteral("Send the deck")).isEmpty());
+        QVERIFY(!dashboard.completeTask(QStringLiteral("../elsewhere.md"), 1, QStringLiteral("x")).isEmpty());
+        QTRY_COMPARE(dashboard.data().value(QStringLiteral("tasks")).toList().size(), 1);
+
+        // The command line and agents get the same.
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root, &error));
+        const QJsonObject fromApi = api.call(*NotesApi::toolNamed(QStringLiteral("dashboard")), {{QStringLiteral("days"), 7}});
+        QCOMPARE(fromApi.value(QStringLiteral("from")).toString(), today.addDays(-6).toString(Qt::ISODate));
+        QCOMPARE(fromApi.value(QStringLiteral("tasks")).toArray().size(), 1);
+    }
+
+    void dashboardFindsUnsavedNotesInsideABiggerRepository() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed.");
+        QTemporaryDir dir;
+        const QString top = QFileInfo(dir.path()).canonicalFilePath();
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), top});
+        const QString root = top + QStringLiteral("/notes");
+        writeFile(root + QStringLiteral("/idea.md"), "# Idea\n\n- [ ] Try it\n");
+        NoteIndex index;
+        index.setRoot(root);
+        index.rescanNow();
+        const QJsonObject board = Dashboard::build(root, Dashboard::snapshot(index, root), 7, QDate::currentDate());
+        QCOMPARE(board.value(QStringLiteral("history")).toString(), QStringLiteral("git"));
+        const QJsonArray days = board.value(QStringLiteral("activity")).toArray();
+        QCOMPARE(days.size(), 1);
+        const QJsonObject note = days.at(0).toObject().value(QStringLiteral("notes")).toArray().at(0).toObject();
+        QCOMPARE(note.value(QStringLiteral("path")).toString(), QStringLiteral("idea.md"));
+        QVERIFY(note.value(QStringLiteral("created")).toBool());
+        QVERIFY(note.value(QStringLiteral("exists")).toBool());
+    }
+
+    void showsTheDashboard() {
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        Layout::create(root);
+        const QString plan = root + QStringLiteral("/03-projects/alpha/plan.md");
+        const QString kickoff = root + QStringLiteral("/03-projects/alpha/kickoff.md");
+        writeFile(plan, "# Plan\n\n- [ ] Send the deck\n- [ ] Book the room\n");
+        writeFile(kickoff, "# Kickoff\n\nWith [[plan]].\n\n- [ ] Write minutes\n"
+                           "- [ ] **Ann:** send `notes.pdf` to [[plan|the team]] and [the client](https://example.com)\n");
+        Moc::update(root);
+
+        Backend backend;
+        Vault vault;
+        QVERIFY(vault.openFolder(root));
+        QQmlEngine engine;
+        QScopedPointer<QObject> window(loadMain(engine, backend, vault));
+        QVERIFY(window);
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(plan)));
+        QTRY_COMPARE(backend.fileUrl(), QUrl::fromLocalFile(plan));
+
+        QMetaObject::invokeMethod(window.get(), "toggleDashboard");
+        auto *view = window->findChild<QObject *>(QStringLiteral("dashboardView"));
+        QVERIFY(view);
+        QTRY_VERIFY(view->property("visible").toBool());
+        QVERIFY(m_windowDashboard->active());
+        QTRY_COMPARE(m_windowDashboard->data().value(QStringLiteral("tasks")).toList().size(), 4);
+        // Task text reads without its Markdown marks.
+        QVariant plain;
+        QMetaObject::invokeMethod(view, "plainText", Q_RETURN_ARG(QVariant, plain),
+                                  Q_ARG(QVariant, QStringLiteral("**Ann:** send `notes.pdf` to [[plan|the team]], [[plan]] and [the client](https://example.com)")));
+        QCOMPARE(plain.toString(), QStringLiteral("Ann: send notes.pdf to the team, plan and the client"));
+        if (qEnvironmentVariableIsSet("OMAZETTEL_DASH_SHOT")) {
+            auto *quickWindow = qobject_cast<QQuickWindow *>(window.get());
+            quickWindow->resize(1200, 900);
+            quickWindow->show();
+            QTest::qWait(1500);
+            quickWindow->grabWindow().save(qEnvironmentVariable("OMAZETTEL_DASH_SHOT"));
+        }
+
+        auto taskNamed = [this](const QString &text) {
+            for (const QVariant &task : m_windowDashboard->data().value(QStringLiteral("tasks")).toList()) {
+                if (task.toMap().value(QStringLiteral("text")).toString() == text)
+                    return task;
+            }
+            return QVariant();
+        };
+        // In the open note, the editor's text changes and is saved.
+        QMetaObject::invokeMethod(window.get(), "completeDashboardTask", Q_ARG(QVariant, taskNamed(QStringLiteral("Book the room"))));
+        QTRY_VERIFY(readFile(plan).contains(QStringLiteral("- [x] Book the room\n")));
+        QVERIFY(readFile(plan).contains(QStringLiteral("- [ ] Send the deck\n")));
+        QVERIFY(!backend.modified());
+        // In another note, the file changes.
+        QMetaObject::invokeMethod(window.get(), "completeDashboardTask", Q_ARG(QVariant, taskNamed(QStringLiteral("Write minutes"))));
+        QVERIFY(readFile(kickoff).contains(QStringLiteral("- [x] Write minutes\n")));
+        QTRY_COMPARE(m_windowDashboard->data().value(QStringLiteral("tasks")).toList().size(), 2);
+        QVERIFY(view->property("visible").toBool());
+
+        // Opening a note goes back to writing; the shortcut's action toggles.
+        QMetaObject::invokeMethod(window.get(), "openNote", Q_ARG(QVariant, QUrl::fromLocalFile(kickoff)));
+        QTRY_VERIFY(!view->property("visible").toBool());
+        QVERIFY(!m_windowDashboard->active());
+        QMetaObject::invokeMethod(window.get(), "toggleDashboard");
+        QTRY_VERIFY(view->property("visible").toBool());
+        QMetaObject::invokeMethod(window.get(), "toggleDashboard");
+        QTRY_VERIFY(!view->property("visible").toBool());
+    }
+
     void writesMeetingNotesWithAnAgent() {
         // A stand-in "claude" that answers like the real one.
         QTemporaryDir bin;
@@ -2878,6 +3126,9 @@ private:
         m_windowSync = std::make_unique<Sync>();
         m_windowSync->setRoot(vault.rootPath());
         engine.rootContext()->setContextProperty(QStringLiteral("sync"), m_windowSync.get());
+        m_windowDashboard = std::make_unique<Dashboard>(m_windowIndex.get());
+        m_windowDashboard->setRoot(vault.rootPath());
+        engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), m_windowDashboard.get());
         PdfDocument::install(&engine);
         QQmlComponent component(&engine, QUrl::fromLocalFile(mainQmlPath));
         if (!component.isReady()) {
@@ -2897,6 +3148,7 @@ private:
     std::unique_ptr<Exporter> m_windowExporter;
     std::unique_ptr<Citations> m_windowCitations;
     std::unique_ptr<Sync> m_windowSync;
+    std::unique_ptr<Dashboard> m_windowDashboard;
 };
 
 QTEST_MAIN(NotesTest)

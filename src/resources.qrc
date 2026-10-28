@@ -8,6 +8,7 @@
         <file alias="UnsavedChangesDialog.qml">UnsavedChangesDialog.qml</file>
         <file alias="LayoutChoiceDialog.qml">LayoutChoiceDialog.qml</file>
         <file alias="PdfView.qml">PdfView.qml</file>
+        <file alias="DashboardView.qml">DashboardView.qml</file>
         <file alias="ExternalChangeDialog.qml">ExternalChangeDialog.qml</file>
         <file alias="FontPicker.qml">FontPicker.qml</file>
         <file alias="EditorMutations.js">EditorMutations.js</file>
