@@ -56,6 +56,9 @@ class Sync : public QObject {
     // The name and email versions are saved under, in this repository.
     Q_PROPERTY(QString commitName READ commitName NOTIFY changed)
     Q_PROPERTY(QString commitEmail READ commitEmail NOTIFY changed)
+    // A repository around the notes folder that covers the whole home
+    // folder, which version history leaves alone ("" when there is none).
+    Q_PROPERTY(QString outerRepository READ outerRepository NOTIFY changed)
     Q_PROPERTY(QString logPath READ logPath CONSTANT)
 
 public:
@@ -87,7 +90,15 @@ public:
     bool remoteIsHttps() const { return m_remoteUrl.startsWith(QLatin1String("http")); }
     QString commitName() const { return m_commitName; }
     QString commitEmail() const { return m_commitEmail; }
+    QString outerRepository() const { return m_outerRepository; }
     static QString logPath();
+    // The git repository that holds the notes folder, or "" when there is
+    // none. A repository of the whole home folder (or above it) doesn't count
+    // as the notes' own; ignored, when given, then names it.
+    static QString repositoryOf(const QString &notesRoot, QString *ignored = nullptr);
+    // Why a remote's address won't work, with the fix, or "" when it looks
+    // right (https://host/you/notes.git, git@host:you/notes.git, a path).
+    static QString checkRemoteAddress(const QString &url);
 
     Q_INVOKABLE void setRoot(const QString &notesRoot);
     // Re-reads the repository's status and the folder's conflict copies.
@@ -198,6 +209,7 @@ private:
     QString m_errorKind;
     QString m_commitName;
     QString m_commitEmail;
+    QString m_outerRepository;
     QString m_hostKindSetting;
     QString m_error;
     QDateTime m_lastSync;

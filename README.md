@@ -173,6 +173,15 @@ cd omazettel
 ./bin/install
 ```
 
+If your notes already sync from another computer, clone them rather than
+starting a new notes folder (see [Sync and history](#sync-and-history)), and
+keep them outside iCloud Drive: with "Desktop & Documents Folders" turned on in
+iCloud, `~/Documents` is in iCloud, which doesn't mix well with git.
+
+```sh
+git clone https://github.com/you/notes.git ~/Notes
+```
+
 Then open OmaZettel from Applications or Spotlight. Finder can open Markdown
 notes and PDFs with it. For the `omazettel` command in a terminal:
 
@@ -453,7 +462,17 @@ format the citations and add a reference list. A note may also name its own
 
 Your notes stay plain files on your computer. To keep them on other devices, or
 share them with a few people taking turns, OmaZettel has git built in (… →
-**Sync & history…**, or click the status line at the foot of the sidebar):
+**Sync & history…**, or click the status line at the foot of the sidebar).
+
+**Notes already synced from another computer?** Don't set them up again on the
+new one: clone the repository and choose that folder in OmaZettel. It then has
+the remote and the whole history already, and syncs straight away.
+
+```sh
+git clone https://github.com/you/notes.git ~/Notes        # or your GitLab, Forgejo, Gitea… address
+```
+
+To start syncing for the first time:
 
 1. **Turn on version history.** Every version of every note is kept with git.
 2. **Add a remote** on any git server: GitHub, GitLab, Codeberg, Forgejo,
@@ -508,11 +527,9 @@ Sync & history, and resolved the same way.
 OmaZettel does not edit a note live alongside someone else. People take turns
 and sync, and the conflict screen handles the occasional clash.
 
-On another computer, clone the repository and choose that folder in OmaZettel:
-
-```sh
-git clone https://github.com/you/notes.git ~/Notes        # or your GitLab, Forgejo, Gitea… address
-```
+If your whole home folder is a git repository (some people keep settings files
+that way), version history leaves it alone and starts one just for the notes
+folder, so a sync never sends anything else from your home folder.
 
 ## Command line and AI assistants
 

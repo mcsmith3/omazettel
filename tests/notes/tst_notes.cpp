@@ -1690,6 +1690,102 @@ private slots:
         QCOMPARE(sync.changeCount(), 0);
     }
 
+    void leavesAHomeFolderRepositoryAlone() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed.");
+        // A home folder that is a git repository, with the notes inside it.
+        QTemporaryDir dir;
+        const QString home = QFileInfo(dir.path()).canonicalFilePath();
+        const QString notes = home + QStringLiteral("/Documents/notes");
+        writeFile(notes + QStringLiteral("/Plan.md"), "# Plan\n");
+        writeFile(home + QStringLiteral("/.secrets"), "token\n");
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), home});
+        const QByteArray realHome = qgetenv("HOME");
+        qputenv("HOME", home.toUtf8());
+        const auto restore = qScopeGuard([&realHome] { qputenv("HOME", realHome); });
+
+        QString ignored;
+        QCOMPARE(Sync::repositoryOf(notes, &ignored), QString());
+        QCOMPARE(ignored, home);
+        Sync sync;
+        sync.setRoot(notes);
+        QVERIFY(!sync.isRepo());
+        QCOMPARE(sync.outerRepository(), home);
+        QCOMPARE(Dashboard::build(notes, {}, 7, QDate::currentDate()).value(QStringLiteral("history")).toString(),
+                 QStringLiteral("files"));
+
+        // Turning history on starts the notes' own, which sees nothing else.
+        QVERIFY(sync.enable());
+        QCOMPARE(sync.repoRoot(), notes);
+        QCOMPARE(sync.outerRepository(), QString());
+        QString files;
+        QProcess git;
+        git.setWorkingDirectory(notes);
+        git.start(QStringLiteral("git"), {QStringLiteral("ls-files")});
+        QVERIFY(git.waitForFinished());
+        QCOMPARE(QString::fromUtf8(git.readAllStandardOutput()).trimmed(), QStringLiteral("Plan.md"));
+
+        // A repository around the notes that is not the home folder still counts.
+        QTemporaryDir projectDir;
+        const QString project = QFileInfo(projectDir.path()).canonicalFilePath();
+        writeFile(project + QStringLiteral("/notes/Idea.md"), "# Idea\n");
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), project});
+        QCOMPARE(Sync::repositoryOf(project + QStringLiteral("/notes")), project);
+    }
+
+    void checksRemoteAddresses() {
+        for (const QString &good : {QStringLiteral("https://github.com/you/notes.git"), QStringLiteral("git@github.com:you/notes.git"),
+                                    QStringLiteral("ssh://git@example.com:2222/you/notes.git"),
+                                    QStringLiteral("https://git.example.com:8443/you/notes.git"), QStringLiteral("/srv/git/notes.git"),
+                                    QString()})
+            QVERIFY2(Sync::checkRemoteAddress(good).isEmpty(), qPrintable(good));
+        QVERIFY(Sync::checkRemoteAddress(QStringLiteral("https://github.com:you/notes.git"))
+                    .endsWith(QStringLiteral("https://github.com/you/notes.git")));
+        QVERIFY(Sync::checkRemoteAddress(QStringLiteral("https://me@github.com:you/notes.git"))
+                    .endsWith(QStringLiteral("https://me@github.com/you/notes.git")));
+        QVERIFY(Sync::checkRemoteAddress(QStringLiteral("github.com/you/notes.git"))
+                    .endsWith(QStringLiteral("https://github.com/you/notes.git")));
+        QVERIFY(!Sync::checkRemoteAddress(QStringLiteral("https://github.com/you/my notes.git")).isEmpty());
+
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), root});
+        Sync sync;
+        sync.setRoot(root);
+        QVERIFY(!sync.setRemote(QStringLiteral("https://github.com:you/notes.git")));
+        QVERIFY(sync.lastError().contains(QStringLiteral("https://github.com/you/notes.git")));
+        QCOMPARE(sync.remoteUrl(), QString());
+    }
+
+    void getsPastALeftoverLock() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed.");
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        writeFile(root + QStringLiteral("/Plan.md"), "# Plan\n");
+        Sync sync;
+        sync.setRoot(root);
+        QVERIFY(sync.enable());
+        writeFile(root + QStringLiteral("/Plan.md"), "# Plan\n\nMore.\n");
+
+        // A lock just made: maybe a git at work, so say what it is.
+        const QString lock = root + QStringLiteral("/.git/index.lock");
+        writeFile(lock, "");
+        Sync::Result result = Sync::runSync(root, QStringLiteral("main"), false, QStringLiteral("Test"));
+        QVERIFY(!result.ok);
+        QCOMPARE(result.kind, QStringLiteral("lock"));
+        QVERIFY(result.message.contains(QStringLiteral(".git/index.lock")));
+
+        // An old one was left by a git that stopped halfway: it goes.
+        QFile file(lock);
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
+        file.close();
+        result = Sync::runSync(root, QStringLiteral("main"), false, QStringLiteral("Test"));
+        QVERIFY2(result.ok, qPrintable(result.message));
+        QVERIFY(!QFileInfo::exists(lock));
+    }
+
     void reloadsTheOpenNoteAfterASync() {
         QTemporaryDir dir;
         const QString path = dir.filePath(QStringLiteral("Open.md"));
