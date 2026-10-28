@@ -22,6 +22,9 @@ QString topName();
 // A project folder's map file name, without .md: "vdem" -> "vdem-moc".
 QString nameFor(const QString &projectFolder);
 
+// One of the maps OmaZettel keeps: 03-projects/projects-moc.md or a
+// project's 03-projects/<project>/<project>-moc.md.
+bool isMap(const QString &relativePath);
 // A transcript: in a "transcripts" folder, or a note named "... transcript".
 bool isTranscript(const QString &relativePath);
 

@@ -106,6 +106,16 @@ QString nameFor(const QString &projectFolder) {
            + QStringLiteral("moc");
 }
 
+bool isMap(const QString &relativePath) {
+    const QStringList parts = relativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.isEmpty() || parts.first() != QLatin1String(Layout::projectsFolder))
+        return false;
+    const QString base = QFileInfo(parts.last()).completeBaseName();
+    if (parts.size() == 2)
+        return base.compare(topName(), Qt::CaseInsensitive) == 0;
+    return parts.size() == 3 && base.compare(nameFor(parts.at(1)), Qt::CaseInsensitive) == 0;
+}
+
 bool isTranscript(const QString &relativePath) {
     const QStringList parts = relativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
     for (int i = 0; i + 1 < parts.size(); ++i) {

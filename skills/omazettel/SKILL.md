@@ -37,6 +37,7 @@ omazettel daily [date] [--append text] [-s Log]
 omazettel capture <text> [--task]
 omazettel tasks [--status open|done|all] [--note N] [--folder F] [--tag T]
 omazettel tags | links                            # tag counts; broken links and orphans
+omazettel dashboard [--days 7]                    # activity per day, streak, open tasks, projects, notes needing a look
 omazettel rename <note|folder> <new name>         # rewrites [[links]]
 omazettel tidy-names [folder] [--apply]           # spaces in file names -> separator; preview first
 omazettel setup-layout [--apply]                  # older folder -> numbered layout; preview first
@@ -188,8 +189,9 @@ note (from the Note template) if there is none. To change a header field:
 
 ## Reviews and questions about the notes
 
-`list --since 7d --sort modified --json`, then `show` the meeting and daily
-notes, and `tasks --json` for what is open. Quote note paths so the person can
+`dashboard --days 7` gives the week at a glance: notes made and changed each
+day, open tasks by note and project, and notes needing a look. Then `show` the
+meeting and daily notes it names, and `tasks --json` for what is open. Quote note paths so the person can
 open them (`omazettel <path>` opens one in the app).
 
 ## Organising and exporting

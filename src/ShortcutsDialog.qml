@@ -24,6 +24,7 @@ Dialog {
         { key: "Ctrl+N", desc: "New Note" },
         { key: "Ctrl+Shift+N", desc: "New Window" },
         { key: "Ctrl+Shift+D", desc: "Today's Daily Note" },
+        { key: "Ctrl+Shift+H", desc: "Dashboard" },
         { key: "Ctrl+Shift+E", desc: "Export with pandoc" },
         { key: "Ctrl+Shift+F", desc: "Search All Notes" },
         { key: "Ctrl+Alt+S", desc: "Sync Now" },

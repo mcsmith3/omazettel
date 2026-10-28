@@ -1,6 +1,7 @@
 #include "notesapi.h"
 
 #include "assistant.h"
+#include "dashboard.h"
 #include "exporter.h"
 #include "layout.h"
 #include "moc.h"
@@ -381,6 +382,15 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
          QStringLiteral("Checks the links between notes: [[links]] that name no note (broken) and notes no "
                         "other note links to (orphans)."),
          {}, true, false, &NotesApi::linkReport},
+        {QStringLiteral("dashboard"), QStringLiteral("dashboard"),
+         QStringLiteral("An overview of the notes, as the app's dashboard shows it: notes made and changed "
+                        "each day (from git history when the notes folder has it, else file dates), the "
+                        "streak of days written, open tasks with their notes, projects with their note and "
+                        "open-task counts, notes needing a look (broken links, notes nothing links to, empty "
+                        "notes), top tags and recently changed notes. Good for \"what did I work on this "
+                        "week?\" or a project status."),
+         {{QStringLiteral("days"), QStringLiteral("integer"), QStringLiteral("How many days of activity, up to today (default 365)"), false, true}},
+         true, false, &NotesApi::dashboard},
         {QStringLiteral("rename_note"), QStringLiteral("rename"),
          QStringLiteral("Renames a note or folder and rewrites every [[link]] to it, as the app does."),
          {{QStringLiteral("note"), QStringLiteral("string"), QStringLiteral("The note (or folder) to rename"), true, true},
@@ -1182,6 +1192,13 @@ QJsonObject NotesApi::linkReport(const QJsonObject &) {
             orphans.append(relative(path));
     }
     return {{QStringLiteral("broken"), broken}, {QStringLiteral("orphans"), orphans}};
+}
+
+QJsonObject NotesApi::dashboard(const QJsonObject &args) {
+    const int days = integer(args, QStringLiteral("days"), 365);
+    if (days < 1)
+        fail(QStringLiteral("days is 1 or more."));
+    return Dashboard::build(m_root, Dashboard::snapshot(m_index, m_root), qMin(days, 3660), QDate::currentDate());
 }
 
 QJsonObject NotesApi::listTemplates(const QJsonObject &) {

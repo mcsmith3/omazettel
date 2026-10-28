@@ -22,6 +22,7 @@
 #include "cli.h"
 #include "systemtheme.h"
 #include "citations.h"
+#include "dashboard.h"
 #include "exporter.h"
 #include "noteindex.h"
 #include "notetemplates.h"
@@ -142,6 +143,11 @@ int main(int argc, char *argv[]) {
             sync.refresh();
         }
     });
+    // The dashboard: activity, open tasks and notes that need a look.
+    Dashboard dashboard(&noteIndex, &app);
+    dashboard.setRoot(vault.rootPath());
+    QObject::connect(&vault, &Vault::rootPathChanged, &dashboard,
+                     [&vault, &dashboard]() { dashboard.setRoot(vault.rootPath()); });
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &noteIndex,
                      [&noteIndex](Qt::ApplicationState state) {
                          if (state == Qt::ApplicationActive)
@@ -161,6 +167,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("exporter"), &exporter);
     engine.rootContext()->setContextProperty(QStringLiteral("citations"), &citations);
     engine.rootContext()->setContextProperty(QStringLiteral("sync"), &sync);
+    engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), &dashboard);
 
     PdfDocument::install(&engine);
     engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
