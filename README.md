@@ -170,8 +170,7 @@ OmaZettel builds on macOS from source, with Qt and Poppler from
 brew install qtbase qtdeclarative qtsvg poppler-qt6 pkgconf pandoc
 git clone https://github.com/mcsmith3/omazettel.git
 cd omazettel
-./bin/build
-rm -rf /Applications/OmaZettel.app && mv build/OmaZettel.app /Applications/
+./bin/install
 ```
 
 Then open OmaZettel from Applications or Spotlight. Finder can open Markdown
@@ -181,7 +180,8 @@ notes and PDFs with it. For the `omazettel` command in a terminal:
 ln -sf /Applications/OmaZettel.app/Contents/MacOS/OmaZettel "$(brew --prefix)/bin/omazettel"
 ```
 
-**Update:** in the `omazettel` folder, run `git pull`, `./bin/build` and the `rm`/`mv` line again.
+`./bin/install` builds `OmaZettel.app` and puts it in Applications.
+**Update:** in the `omazettel` folder, run `git pull` and `./bin/install` again.
 Shortcuts use ⌘ where Linux uses Ctrl; Find and replace is ⌥⌘F, since ⌘H hides
 the app. Transcribing recordings isn't set up for macOS yet. Optionally,
 `brew install --cask font-jetbrains-mono` for the font OmaZettel uses on
