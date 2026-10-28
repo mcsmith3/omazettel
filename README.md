@@ -343,6 +343,8 @@ tags: [meeting]
 the command palette shows an overview of the notes folder in place of the
 editor. Click a note, or press Esc, to go back to writing.
 
+![The dashboard: a year of activity, projects and open tasks (Tokyo Night theme)](docs/screenshots/dashboard.png)
+
 - **Activity**: a square for each day of the past year, darker the more notes
   you made or changed. Hover over a day for its numbers, or click it to list
   its notes. With [Sync and history](#sync-and-history) on, the days come from
