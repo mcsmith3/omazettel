@@ -2839,6 +2839,27 @@ private slots:
         QCOMPARE(fromApi.value(QStringLiteral("tasks")).toArray().size(), 1);
     }
 
+    void dashboardFindsUnsavedNotesInsideABiggerRepository() {
+        if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
+            QSKIP("git is not installed.");
+        QTemporaryDir dir;
+        const QString top = QFileInfo(dir.path()).canonicalFilePath();
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q"), top});
+        const QString root = top + QStringLiteral("/notes");
+        writeFile(root + QStringLiteral("/idea.md"), "# Idea\n\n- [ ] Try it\n");
+        NoteIndex index;
+        index.setRoot(root);
+        index.rescanNow();
+        const QJsonObject board = Dashboard::build(root, Dashboard::snapshot(index, root), 7, QDate::currentDate());
+        QCOMPARE(board.value(QStringLiteral("history")).toString(), QStringLiteral("git"));
+        const QJsonArray days = board.value(QStringLiteral("activity")).toArray();
+        QCOMPARE(days.size(), 1);
+        const QJsonObject note = days.at(0).toObject().value(QStringLiteral("notes")).toArray().at(0).toObject();
+        QCOMPARE(note.value(QStringLiteral("path")).toString(), QStringLiteral("idea.md"));
+        QVERIFY(note.value(QStringLiteral("created")).toBool());
+        QVERIFY(note.value(QStringLiteral("exists")).toBool());
+    }
+
     void showsTheDashboard() {
         QTemporaryDir dir;
         const QString root = QFileInfo(dir.path()).canonicalFilePath();

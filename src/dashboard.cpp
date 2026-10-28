@@ -242,7 +242,11 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
                                    QStringLiteral("--format=%x01%aI"), QStringLiteral("--name-status"),
                                    QStringLiteral("-z"), QStringLiteral("--relative"), QStringLiteral("--"),
                                    QStringLiteral(".")});
-    if (!log.isNull()) {
+    // A repository with no versions yet has no log, but git still knows
+    // which notes are new.
+    const bool repository = !log.isNull()
+        || git(root, {QStringLiteral("rev-parse"), QStringLiteral("--is-inside-work-tree")}).trimmed() == QLatin1String("true");
+    if (repository) {
         history = QStringLiteral("git");
         // Newest first, so a rename is seen before the older changes made
         // under the old name, which then count for the note as it is named now.
@@ -279,7 +283,8 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
         const QString changes = git(root, {QStringLiteral("-c"), QStringLiteral("core.quotePath=false"),
                                            QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z"),
                                            QStringLiteral("--untracked-files=all"), QStringLiteral(".")});
-        const QString prefix = base.relativeFilePath(git(root, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}).trimmed());
+        const QString top = git(root, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}).trimmed();
+        const QDir notes(QFileInfo(root).canonicalFilePath());
         const QStringList entries = changes.split(QLatin1Char('\0'), Qt::SkipEmptyParts);
         for (int i = 0; i < entries.size(); ++i) {
             const QString entry = entries.at(i);
@@ -291,7 +296,7 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
             if (code.contains(QLatin1Char('D')))
                 continue;
             // status names paths from the top of the repository.
-            const QString path = QDir::cleanPath(prefix == QLatin1String(".") ? entry.mid(3) : prefix + QLatin1Char('/') + entry.mid(3));
+            const QString path = notes.relativeFilePath(QDir(top).filePath(entry.mid(3)));
             const Info note = info.value(path);
             if (!info.contains(path))
                 continue;
