@@ -142,7 +142,7 @@ Dialog {
                 text: "Customize theme colors…"
                 onClicked: root.editFileRequested(backend.customizeThemeTemplate())
             }
-            Small { text: "The writing font is in the footer (the A button); text size follows Ctrl+= and Ctrl+-." }
+            Small { text: backend.keys("The writing font is in the footer (the A button); text size follows Ctrl+= and Ctrl+-.") }
 
             // ── Notes ───────────────────────────────────────────────────────
             Heading { text: "Notes" }
@@ -193,7 +193,7 @@ Dialog {
                 text: "Make a note for a new [[link]] when the note is saved"
                 onToggled: vault.autoCreateLinks = !vault.autoCreateLinks
             }
-            Small { text: "Off: notes are only made when you Ctrl+click a link." }
+            Small { text: backend.keys("Off: notes are only made when you Ctrl+click a link.") }
             RowLayout {
                 spacing: root.scaled(8)
                 Small { text: "Between words in new note file names" }

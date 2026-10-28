@@ -2907,6 +2907,24 @@ private slots:
         QCOMPARE(days.at(0).toObject().value(QStringLiteral("edited")).toInt(), 1);
     }
 
+    void writesShortcutsTheMacWay() {
+        QCOMPARE(Backend::macKeys(QStringLiteral("Ctrl+N")), QStringLiteral("⌘N"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Dashboard (Ctrl+Shift+H)")), QStringLiteral("Dashboard (⇧⌘H)"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Sync now (Ctrl+Alt+S)")), QStringLiteral("Sync now (⌥⌘S)"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Ctrl+Shift+Z / Ctrl+Y")), QStringLiteral("⇧⌘Z / ⌘Y"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Ctrl+Meta+F / F11")), QStringLiteral("⌃⌘F / F11"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("text size follows Ctrl+= and Ctrl+-.")),
+                 QStringLiteral("text size follows ⌘= and ⌘-."));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Ctrl+\\")), QStringLiteral("⌘\\"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("when you Ctrl+click a link")), QStringLiteral("when you ⌘click a link"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Shift+Enter")), QStringLiteral("⇧Enter"));
+        QCOMPARE(Backend::macKeys(QStringLiteral("Escape")), QStringLiteral("Escape"));
+#ifndef Q_OS_MACOS
+        Backend backend;
+        QCOMPARE(backend.keys(QStringLiteral("Ctrl+Shift+H")), QStringLiteral("Ctrl+Shift+H"));
+#endif
+    }
+
     void showsTheDashboard() {
         QTemporaryDir dir;
         const QString root = QFileInfo(dir.path()).canonicalFilePath();

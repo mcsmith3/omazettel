@@ -10,7 +10,7 @@ else
   QMAKE=qmake
 fi
 
-JOBS="$(nproc 2>/dev/null || echo 1)"
+JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"
 
 # Upstream Omawrite's tests.
 mkdir -p "$BUILD_DIR"

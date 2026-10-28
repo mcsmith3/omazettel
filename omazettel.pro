@@ -58,3 +58,11 @@ SOURCES += \
     src/zettel.cpp
 
 RESOURCES += src/resources.qrc
+
+# macOS: an OmaZettel.app bundle with its icon and the file types Finder can
+# open with it. bin/build adds the PDF add-on and the version.
+macx {
+    TARGET = OmaZettel
+    ICON = packaging/macos/omazettel.icns
+    QMAKE_INFO_PLIST = packaging/macos/Info.plist
+}

@@ -161,6 +161,32 @@ cd omazettel
 ./bin/install
 ```
 
+### macOS (early)
+
+OmaZettel builds on macOS from source, with Qt and Poppler from
+[Homebrew](https://brew.sh). It's new there, so tell us what doesn't work.
+
+```sh
+brew install qtbase qtdeclarative qtsvg poppler-qt6 pkgconf pandoc
+git clone https://github.com/mcsmith3/omazettel.git
+cd omazettel
+./bin/build
+rm -rf /Applications/OmaZettel.app && mv build/OmaZettel.app /Applications/
+```
+
+Then open OmaZettel from Applications or Spotlight. Finder can open Markdown
+notes and PDFs with it. For the `omazettel` command in a terminal:
+
+```sh
+ln -sf /Applications/OmaZettel.app/Contents/MacOS/OmaZettel "$(brew --prefix)/bin/omazettel"
+```
+
+**Update:** in the `omazettel` folder, run `git pull`, `./bin/build` and the `rm`/`mv` line again.
+Shortcuts use ⌘ where Linux uses Ctrl; Find and replace is ⌥⌘F, since ⌘H hides
+the app. Transcribing recordings isn't set up for macOS yet. Optionally,
+`brew install --cask font-jetbrains-mono` for the font OmaZettel uses on
+Omarchy (otherwise it uses Menlo).
+
 ## Getting started
 
 1. Open **OmaZettel** from the app launcher.
@@ -697,7 +723,9 @@ folder at the last note. `omazettel --help` lists the commands (see
 You need the [requirements](#requirements) above: Qt 6.8 or newer
 (`qt6-base`, `qt6-declarative`), `poppler-qt6`, a C++17 compiler and `make`.
 `bin/build` also builds `libomazettel-pdf.so`, the PDF view's reader, which
-OmaZettel loads only when it shows a PDF.
+OmaZettel loads only when it shows a PDF. On macOS it builds
+`build/OmaZettel.app` instead, with the reader inside it (see
+[macOS](#macos-early)).
 
 ```sh
 ./bin/build            # builds ./build/omazettel

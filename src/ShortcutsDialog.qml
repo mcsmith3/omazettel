@@ -37,9 +37,9 @@ Dialog {
         { key: "Ctrl+P", desc: "Print" },
         { key: "Ctrl+Z", desc: "Undo" },
         { key: "Ctrl+Shift+Z / Ctrl+Y", desc: "Redo" },
-        { key: "F11 / Super+F", desc: "Fullscreen" },
+        { key: Qt.platform.os === "osx" ? "Ctrl+Meta+F / F11" : "F11 / Super+F", desc: "Fullscreen" },
         { key: "Ctrl+F", desc: "Find" },
-        { key: "Ctrl+H", desc: "Find & Replace" },
+        { key: Qt.platform.os === "osx" ? "Ctrl+Alt+F" : "Ctrl+H", desc: "Find & Replace" },
         { key: "Ctrl+G / Enter", desc: "Next Match in Find" },
         { key: "Shift+Enter", desc: "Previous Match in Find" },
         { key: "Escape", desc: "Close Find" },
@@ -138,7 +138,7 @@ Dialog {
                         Layout.preferredWidth: Math.min(Math.round(148 * root.textScale),
                             (shortcutsGrid.width / shortcutsGrid.columns - 10) * 0.5)
                         Layout.minimumWidth: 0
-                        text: modelData.key
+                        text: backend.keys(modelData.key)
                         color: root.strongTextColor
                         font.family: Qt.application.font.family
                         font.pixelSize: Math.round(12 * root.textScale)

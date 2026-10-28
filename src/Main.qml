@@ -566,35 +566,35 @@ ApplicationWindow {
         var hasFolder = vault.isOpen;
         var hasNote = currentPath().length > 0;
         var all = [
-            { id: "newNote", name: "New note", title: "Ctrl+N", when: hasFolder },
-            { id: "daily", name: "Today's daily note", title: "Ctrl+Shift+D", when: hasFolder },
-            { id: "dashboard", name: "Dashboard: activity, open tasks and projects", title: "Ctrl+Shift+H", when: hasFolder },
+            { id: "newNote", name: "New note", title: backend.keys("Ctrl+N"), when: hasFolder },
+            { id: "daily", name: "Today's daily note", title: backend.keys("Ctrl+Shift+D"), when: hasFolder },
+            { id: "dashboard", name: "Dashboard: activity, open tasks and projects", title: backend.keys("Ctrl+Shift+H"), when: hasFolder },
             { id: "newFolder", name: "New folder", title: "", when: hasFolder },
-            { id: "goto", name: "Go to note", title: "Ctrl+O", when: hasFolder },
-            { id: "search", name: "Search all notes", title: "Ctrl+Shift+F", when: hasFolder },
-            { id: "find", name: "Find in note", title: "Ctrl+F", when: true },
-            { id: "replace", name: "Find and replace", title: "Ctrl+H", when: true },
-            { id: "back", name: "Back", title: "Alt+Left", when: backStack.length > 0 },
-            { id: "forward", name: "Forward", title: "Alt+Right", when: forwardStack.length > 0 },
-            { id: "export", name: "Export note", title: "Ctrl+Shift+E", when: hasNote },
+            { id: "goto", name: "Go to note", title: backend.keys("Ctrl+O"), when: hasFolder },
+            { id: "search", name: "Search all notes", title: backend.keys("Ctrl+Shift+F"), when: hasFolder },
+            { id: "find", name: "Find in note", title: backend.keys("Ctrl+F"), when: true },
+            { id: "replace", name: "Find and replace", title: backend.keys(win.replaceKeys), when: true },
+            { id: "back", name: "Back", title: backend.keys("Alt+Left"), when: backStack.length > 0 },
+            { id: "forward", name: "Forward", title: backend.keys("Alt+Right"), when: forwardStack.length > 0 },
+            { id: "export", name: "Export note", title: backend.keys("Ctrl+Shift+E"), when: hasNote },
             { id: "exportFolder", name: "Export this folder", title: "", when: hasFolder },
             { id: "exportAll", name: "Export the whole notes folder", title: "", when: hasFolder },
             { id: "history", name: "Note history", title: "", when: hasNote && sync.isRepo },
-            { id: "syncNow", name: sync.remoteUrl.length > 0 ? "Sync now" : "Save a version now", title: "Ctrl+Alt+S", when: sync.isRepo },
+            { id: "syncNow", name: sync.remoteUrl.length > 0 ? "Sync now" : "Save a version now", title: backend.keys("Ctrl+Alt+S"), when: sync.isRepo },
             { id: "syncDialog", name: "Sync and history settings", title: "", when: hasFolder },
             { id: "citations", name: "Citations", title: "", when: hasFolder },
             { id: "templates", name: "Edit note templates", title: "", when: hasFolder },
             { id: "rename", name: "Rename note", title: "", when: hasNote && noteIndex.covers(currentPath()) },
             { id: "trash", name: "Move note to trash", title: "", when: hasNote && noteIndex.covers(currentPath()) },
-            { id: "sidebar", name: "Show or hide sidebar", title: "Ctrl+\\", when: true },
-            { id: "panel", name: "Show or hide backlinks, tags and outline", title: "Ctrl+Shift+B", when: hasFolder },
+            { id: "sidebar", name: "Show or hide sidebar", title: backend.keys("Ctrl+\\"), when: true },
+            { id: "panel", name: "Show or hide backlinks, tags and outline", title: backend.keys("Ctrl+Shift+B"), when: hasFolder },
             { id: "palette", name: backend.omaPalette ? "Use Omarchy theme colors" : "Use Oma color palette", title: "", when: true },
-            { id: "settings", name: "Settings", title: "Ctrl+,", when: true },
+            { id: "settings", name: "Settings", title: backend.keys("Ctrl+,"), when: true },
             { id: "chooseFolder", name: hasFolder ? "Change notes folder" : "Choose notes folder", title: "", when: true },
-            { id: "openFile", name: "Open file", title: "Ctrl+Shift+O", when: true },
-            { id: "newWindow", name: "New window", title: "Ctrl+Shift+N", when: true },
-            { id: "print", name: "Print", title: "Ctrl+P", when: true },
-            { id: "copyHtml", name: "Copy as HTML", title: "Ctrl+Shift+C", when: true },
+            { id: "openFile", name: "Open file", title: backend.keys("Ctrl+Shift+O"), when: true },
+            { id: "newWindow", name: "New window", title: backend.keys("Ctrl+Shift+N"), when: true },
+            { id: "print", name: "Print", title: backend.keys("Ctrl+P"), when: true },
+            { id: "copyHtml", name: "Copy as HTML", title: backend.keys("Ctrl+Shift+C"), when: true },
             { id: "fullscreen", name: "Full screen", title: "F11", when: true },
             { id: "shortcuts", name: "Keyboard shortcuts", title: "F1", when: true }
         ];
@@ -832,8 +832,12 @@ ApplicationWindow {
         onActivated: backend.save()
     }
 
+    // On macOS ⌘H hides the app, so replace is ⌥⌘F there, as in Mac apps.
+    readonly property string replaceKeys: Qt.platform.os === "osx" ? "Ctrl+Alt+F" : "Ctrl+H"
+    readonly property var fullScreenKeys: Qt.platform.os === "osx" ? ["Ctrl+Meta+F", "F11"] : ["Meta+F", "F11"]
+
     Shortcut {
-        sequence: "Ctrl+H"
+        sequence: win.replaceKeys
         onActivated: win.openSearch(true)
     }
 
@@ -986,7 +990,7 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequences: ["Meta+F", "F11"]
+        sequences: win.fullScreenKeys
         onActivated: toggleFullScreen()
     }
 
@@ -1363,7 +1367,7 @@ ApplicationWindow {
         onRestoreRequested: function(text) {
             EditorMutations.replaceRange(editor, 0, editor.length, text);
             editor.cursorPosition = 0;
-            backend.showStatus("Restored an earlier version; Ctrl+Z takes it back.");
+            backend.showStatus(backend.keys("Restored an earlier version; Ctrl+Z takes it back."));
         }
         onClosed: editor.forceActiveFocus()
     }

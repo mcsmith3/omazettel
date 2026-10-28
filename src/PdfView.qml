@@ -136,7 +136,7 @@ Rectangle {
                 // Shows the zoom; a click fits the page to the width again.
                 text: Math.round(root.zoom * 100) + "%"
                 ToolTip.visible: hovered
-                ToolTip.text: "Fit to width (Ctrl+0)"
+                ToolTip.text: backend.keys("Fit to width (Ctrl+0)")
                 onClicked: root.zoom = 1
             }
             ToolButton { text: "+"; onClicked: root.zoomBy(1.25) }

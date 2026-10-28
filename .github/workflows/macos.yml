@@ -1,0 +1,45 @@
+name: macOS
+
+# Builds OmaZettel.app on Apple Silicon with Qt and Poppler from Homebrew, the
+# way bin/build does on a Mac, and runs both test suites. Nothing is published.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install build dependencies
+        run: |
+          brew install qtbase qtdeclarative qtsvg poppler-qt6 pkgconf
+          brew install --cask font-jetbrains-mono
+      - name: Build
+        run: bin/build
+      - name: Check the app bundle
+        run: |
+          app=build/OmaZettel.app
+          test -x "$app/Contents/MacOS/OmaZettel"
+          test -f "$app/Contents/PlugIns/libomazettel-pdf.dylib"
+          test -f "$app/Contents/Resources/omazettel.icns"
+          plutil -p "$app/Contents/Info.plist" | grep CFBundleShortVersionString
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/OmaZettel" --version
+      - name: Test
+        run: |
+          jobs="$(sysctl -n hw.ncpu)"
+          status=0
+          for suite in "build-tests-notes tests/notes/notes.pro tst_notes" "build-tests-upstream tests/tests.pro tst_omazettel"; do
+            set -- $suite
+            mkdir -p "$1"
+            (cd "$1" && qmake "$GITHUB_WORKSPACE/$2" >/dev/null && make -j"$jobs" >/dev/null)
+            echo "Running $3"
+            (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3" > results.txt 2>&1) || status=1
+            grep -E '^(FAIL!|   Loc:|Totals)' "$1/results.txt" || true
+          done
+          exit $status

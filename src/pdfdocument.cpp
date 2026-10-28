@@ -19,8 +19,9 @@ struct Reader {
 };
 
 // The PDF reader: built in (the tests), or the add-on library beside the
-// program (a build), in lib/omazettel (a package or OmaStore), or named by
-// OMAZETTEL_PDF_LIBRARY. Missing when poppler-qt6 is not installed.
+// program (a build), in lib/omazettel (a package or OmaStore), in the app
+// bundle's PlugIns (macOS), or named by OMAZETTEL_PDF_LIBRARY. Missing when
+// poppler-qt6 is not installed.
 const Reader &reader() {
     static const Reader found = [] {
         Reader result;
@@ -32,9 +33,16 @@ const Reader &reader() {
         QStringList candidates;
         if (qEnvironmentVariableIsSet("OMAZETTEL_PDF_LIBRARY"))
             candidates.append(qEnvironmentVariable("OMAZETTEL_PDF_LIBRARY"));
-        candidates << QDir(appDir).filePath(QStringLiteral("libomazettel-pdf.so"))
-                   << QDir(appDir).filePath(QStringLiteral("../lib/omazettel/libomazettel-pdf.so"))
-                   << QStringLiteral("/usr/lib/omazettel/libomazettel-pdf.so");
+#ifdef Q_OS_MACOS
+        // In the app bundle's PlugIns folder (Contents/MacOS/../PlugIns).
+        const QString file = QStringLiteral("libomazettel-pdf.dylib");
+        candidates << QDir(appDir).filePath(QStringLiteral("../PlugIns/") + file);
+#else
+        const QString file = QStringLiteral("libomazettel-pdf.so");
+#endif
+        candidates << QDir(appDir).filePath(file)
+                   << QDir(appDir).filePath(QStringLiteral("../lib/omazettel/") + file)
+                   << QStringLiteral("/usr/lib/omazettel/") + file;
         for (const QString &candidate : std::as_const(candidates)) {
             if (!QFileInfo::exists(candidate))
                 continue;
@@ -85,8 +93,13 @@ void PdfDocument::load() {
         if (QFileInfo::exists(m_path) && !m_watcher.files().contains(m_path))
             m_watcher.addPath(m_path);
         if (!available())
-            m_error = QStringLiteral("Showing PDFs here needs poppler-qt6:\nsudo pacman -S poppler-qt6\n\n"
-                                     "Open shows it in your PDF viewer meanwhile.");
+            m_error = QStringLiteral("Showing PDFs here needs poppler-qt6:\n%1\n\n"
+                                     "Open shows it in your PDF viewer meanwhile.")
+#ifdef Q_OS_MACOS
+                          .arg(QStringLiteral("brew install poppler-qt6, then build OmaZettel again"));
+#else
+                          .arg(QStringLiteral("sudo pacman -S poppler-qt6"));
+#endif
         else
             reader().sizes(m_path, &m_sizes, &m_error);
     }
