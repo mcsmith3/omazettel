@@ -36,6 +36,25 @@
 
 // Counts QML "Binding loop detected" warnings while it is alive, forwarding
 // everything to the previous handler so test output stays intact.
+// macOS keeps temporary files under /var, a link to /private/var. The app
+// works with real paths, so the tests' folders get them too: set before any
+// QTemporaryDir is made, including the test object's own.
+const bool realTemporaryPath = [] {
+    const QString real = QFileInfo(QDir::tempPath()).canonicalFilePath();
+    if (!real.isEmpty())
+        qputenv("TMPDIR", QFile::encodeName(real));
+    return true;
+}();
+
+// Find and replace: Ctrl+H, or ⌥⌘F on macOS, where ⌘H hides the app.
+void pressReplace(QWindow *window) {
+#ifdef Q_OS_MACOS
+    QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier | Qt::AltModifier);
+#else
+    QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+#endif
+}
+
 class BindingLoopCounter {
 public:
     BindingLoopCounter() {
@@ -467,7 +486,7 @@ private slots:
         QVERIFY(editor && searchField && replaceField && replaceButton && replaceAllButton);
 
         editor->setProperty("text", QStringLiteral("foo foo foo"));
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         searchField->setProperty("text", QStringLiteral("foo"));
         replaceField->setProperty("text", QStringLiteral("Foo"));
 
@@ -591,7 +610,7 @@ private slots:
 
         // Typing does not search until it pauses.
         editor->setProperty("text", QStringLiteral("foo bar foo"));
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         searchField->setProperty("text", QStringLiteral("f"));
         searchField->setProperty("text", QStringLiteral("fo"));
         QCOMPARE(window->property("searchMatches").toList().size(), 0);
@@ -645,7 +664,7 @@ private slots:
         QVERIFY(editor && searchField && replaceField && replaceAllButton);
 
         editor->setProperty("text", QStringLiteral("foo bar foo"));
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         searchField->setProperty("text", QStringLiteral("foo"));
         QTRY_COMPARE(window->property("searchMatches").toList().size(), 2);
 
@@ -653,7 +672,7 @@ private slots:
         // so Replace All does not cut at the old query's matches.
         searchField->setProperty("text", QStringLiteral("o"));
         QMetaObject::invokeMethod(window, "closeSearch");
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         replaceField->setProperty("text", QStringLiteral("x"));
         QMetaObject::invokeMethod(replaceAllButton, "clicked");
         QCOMPARE(editor->property("text").toString(), QStringLiteral("fxx bar fxx"));
@@ -695,14 +714,14 @@ private slots:
         QObject *replaceField = window->findChild<QObject *>(QStringLiteral("replaceField"));
         QVERIFY(editor && replaceField);
 
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         QTest::keyClick(window, Qt::Key_Tab);
         QTRY_VERIFY(replaceField->property("activeFocus").toBool());
         QTest::keyClick(window, Qt::Key_Escape);
         QVERIFY(!window->property("searchOpen").toBool());
 
         // Escape closes the bar from the Replace field itself too.
-        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier);
+        pressReplace(window);
         QMetaObject::invokeMethod(replaceField, "forceActiveFocus");
         QTest::keyClick(window, Qt::Key_Escape);
         QVERIFY(!window->property("searchOpen").toBool());

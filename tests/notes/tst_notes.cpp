@@ -55,6 +55,16 @@ void writeFile(const QString &path, const QByteArray &contents) {
 }
 }
 
+// macOS keeps temporary files under /var, a link to /private/var. The app
+// works with real paths, so the tests' folders get them too: set before any
+// QTemporaryDir is made, including the test object's own.
+const bool realTemporaryPath = [] {
+    const QString real = QFileInfo(QDir::tempPath()).canonicalFilePath();
+    if (!real.isEmpty())
+        qputenv("TMPDIR", QFile::encodeName(real));
+    return true;
+}();
+
 class NotesTest : public QObject {
     Q_OBJECT
 

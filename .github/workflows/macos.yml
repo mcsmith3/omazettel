@@ -43,6 +43,6 @@ jobs:
             (cd "$1" && qmake "$GITHUB_WORKSPACE/$2" "$target" >/dev/null && make -j"$jobs" >/dev/null)
             echo "Running $3"
             (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3" > results.txt 2>&1) || status=1
-            grep -E '^(FAIL!|   Loc:|Totals)' "$1/results.txt" || true
+            grep -E '^(FAIL!|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt" || true
           done
           exit $status
