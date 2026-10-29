@@ -23,6 +23,7 @@
 #include "citations.h"
 #include "cli.h"
 #include "dashboard.h"
+#include "taskdates.h"
 #include "mcpserver.h"
 #include "layout.h"
 #include "moc.h"
@@ -402,6 +403,41 @@ private slots:
     }
 
     // ── Backend additions ───────────────────────────────────────────────────
+
+    void datesTasksTickedInTheEditor() {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("note.md"));
+        writeFile(path, "# Plan\n\n- [ ] Send the deck\n- [ ] Book the room\n");
+        Backend backend;
+        QScopedPointer<QObject> editor(makeEditor(backend));
+        QVERIFY(editor);
+        backend.open(QUrl::fromLocalFile(path));
+        const QString stamp = TaskDates::stampFor(QDate::currentDate());
+        auto type = [&](const QString &text) {
+            editor->setProperty("text", text);
+            backend.editorTextChanged();
+            QTest::qWait(20);
+            backend.editorTextChanged();
+        };
+        auto text = [&]() { return editor->property("text").toString(); };
+
+        // Ticked: dated at the end of the line.
+        type(QStringLiteral("# Plan\n\n- [x] Send the deck\n- [ ] Book the room\n"));
+        QCOMPARE(text(), QStringLiteral("# Plan\n\n- [x] Send the deck") + stamp + QStringLiteral("\n- [ ] Book the room\n"));
+        // Unticked: the date comes off.
+        type(QStringLiteral("# Plan\n\n- [ ] Send the deck") + stamp + QStringLiteral("\n- [ ] Book the room\n"));
+        QCOMPARE(text(), QStringLiteral("# Plan\n\n- [ ] Send the deck\n- [ ] Book the room\n"));
+        // The space deleted, then x typed in the empty box.
+        type(QStringLiteral("# Plan\n\n- [ ] Send the deck\n- [] Book the room\n"));
+        type(QStringLiteral("# Plan\n\n- [ ] Send the deck\n- [X] Book the room\n"));
+        QCOMPARE(text(), QStringLiteral("# Plan\n\n- [ ] Send the deck\n- [X] Book the room") + stamp + QStringLiteral("\n"));
+        // A done task pasted or typed whole keeps its text as written.
+        type(QStringLiteral("# Plan\n\n- [x] Old task (01/02/2025)\n- [ ] Send the deck\n- [X] Book the room") + stamp + QStringLiteral("\n- [x] Pasted\n"));
+        QCOMPARE(text(), QStringLiteral("# Plan\n\n- [x] Old task (01/02/2025)\n- [ ] Send the deck\n- [X] Book the room") + stamp + QStringLiteral("\n- [x] Pasted\n"));
+        // And it saves like any edit.
+        QVERIFY(backend.flushAutoSave());
+        QCOMPARE(readFile(path), text());
+    }
 
     void flushesAutoSaveForSavedNotesOnly() {
         QTemporaryDir dir;
@@ -2968,19 +3004,23 @@ private slots:
         QVERIFY(!tagCounts.contains(QStringLiteral("moc")));
         QVERIFY(board.value(QStringLiteral("recent")).toArray().size() > 0);
 
-        // Ticking off a task, only while the line still holds it.
-        QCOMPARE(Dashboard::tickTask(QStringLiteral("a\n  - [ ] Send the deck\n"), 2, QStringLiteral("Send the deck")),
-                 QStringLiteral("a\n  - [x] Send the deck\n"));
-        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send it\n"), 1, QStringLiteral("Send the deck")).isEmpty());
-        QVERIFY(Dashboard::tickTask(QStringLiteral("- [x] Send the deck\n"), 1, QStringLiteral("Send the deck")).isEmpty());
-        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send the deck\n"), 4, QStringLiteral("Send the deck")).isEmpty());
+        // Ticking off a task dates it.
+        const QDate day(2026, 10, 29);
+        QCOMPARE(Dashboard::tickTask(QStringLiteral("a\n  - [ ] Send the deck\n"), 2, QStringLiteral("Send the deck"), day),
+                 QStringLiteral("a\n  - [x] Send the deck (10/29/2026)\n"));
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send it\n"), 1, QStringLiteral("Send the deck"), day).isEmpty());
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [x] Send the deck\n"), 1, QStringLiteral("Send the deck"), day).isEmpty());
+        // Lines above it changed since: the one open task with that text.
+        QCOMPARE(Dashboard::tickTask(QStringLiteral("New line\n\n- [ ] Send the deck  \n"), 1, QStringLiteral("Send the deck"), day),
+                 QStringLiteral("New line\n\n- [x] Send the deck (10/29/2026)  \n"));
+        QVERIFY(Dashboard::tickTask(QStringLiteral("- [ ] Send the deck\n- [ ] Send the deck\n"), 4, QStringLiteral("Send the deck"), day).isEmpty());
 
         Dashboard dashboard(&index);
         dashboard.setRoot(root);
         dashboard.setActive(true);
         QTRY_VERIFY(dashboard.data().contains(QStringLiteral("summary")) && !dashboard.loading());
         QCOMPARE(dashboard.completeTask(plan, 8, QStringLiteral("Send the deck")), QString());
-        QVERIFY(readFile(root + QLatin1Char('/') + plan).contains(QStringLiteral("- [x] Send the deck\n")));
+        QVERIFY(readFile(root + QLatin1Char('/') + plan).contains(QStringLiteral("- [x] Send the deck") + TaskDates::stampFor(QDate::currentDate()) + QLatin1Char('\n')));
         QVERIFY(!dashboard.completeTask(plan, 8, QStringLiteral("Send the deck")).isEmpty());
         QVERIFY(!dashboard.completeTask(QStringLiteral("../elsewhere.md"), 1, QStringLiteral("x")).isEmpty());
         QTRY_COMPARE(dashboard.data().value(QStringLiteral("tasks")).toList().size(), 1);
@@ -3126,14 +3166,25 @@ private slots:
             }
             return QVariant();
         };
-        // In the open note, the editor's text changes and is saved.
-        QMetaObject::invokeMethod(window.get(), "completeDashboardTask", Q_ARG(QVariant, taskNamed(QStringLiteral("Book the room"))));
-        QTRY_VERIFY(readFile(plan).contains(QStringLiteral("- [x] Book the room\n")));
-        QVERIFY(readFile(plan).contains(QStringLiteral("- [ ] Send the deck\n")));
+        const QString stamp = TaskDates::stampFor(QDate::currentDate());
+        auto *sourceEditor = window->findChild<QObject *>(QStringLiteral("sourceEditor"));
+        QVERIFY(sourceEditor);
+        auto editorText = [sourceEditor]() { return sourceEditor->property("text").toString(); };
+        // In the open note, even after it changed outside the app: the file
+        // changes, and the editor shows it with nothing left to save.
+        QTest::qWait(300);
+        writeFile(plan, "# Plan\n\nAn agent added this.\n\n- [ ] Send the deck\n- [ ] Book the room\n");
+        QTRY_VERIFY(editorText().contains(QStringLiteral("An agent added this.")));
         QVERIFY(!backend.modified());
+        QMetaObject::invokeMethod(window.get(), "completeDashboardTask", Q_ARG(QVariant, taskNamed(QStringLiteral("Book the room"))));
+        QCOMPARE(readFile(plan), QStringLiteral("# Plan\n\nAn agent added this.\n\n- [ ] Send the deck\n- [x] Book the room") + stamp + QLatin1Char('\n'));
+        QCOMPARE(editorText(), readFile(plan));
+        QTest::qWait(300);
+        QVERIFY(!backend.modified());
+        QCOMPARE(readFile(plan), editorText());
         // In another note, the file changes.
         QMetaObject::invokeMethod(window.get(), "completeDashboardTask", Q_ARG(QVariant, taskNamed(QStringLiteral("Write minutes"))));
-        QVERIFY(readFile(kickoff).contains(QStringLiteral("- [x] Write minutes\n")));
+        QVERIFY(readFile(kickoff).contains(QStringLiteral("- [x] Write minutes") + stamp + QLatin1Char('\n')));
         QTRY_COMPARE(m_windowDashboard->data().value(QStringLiteral("tasks")).toList().size(), 2);
         QVERIFY(view->property("visible").toBool());
 

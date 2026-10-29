@@ -141,6 +141,10 @@ public:
     // had. Callers restore the caret after a reload.
     Q_INVOKABLE void pauseFileWatching();
     Q_INVOKABLE bool resumeFileWatching();
+    // When the open note changes on disk and the editor has no unsaved edits,
+    // load the new version quietly (reloadedQuietly) instead of asking. Notes
+    // change outside the app often: agents, the dashboard, sync, scripts.
+    Q_INVOKABLE void setReloadsCleanFiles(bool on) { m_reloadsCleanFiles = on; }
     // The #heading of the [[link]] at a position, or "".
     Q_INVOKABLE QString wikiHeadingAt(int position) const;
     // The open note's headings: [{level, text, position}].
@@ -162,11 +166,14 @@ signals:
     void saveDialogRequested(const QUrl &suggestedUrl);
     void saveSucceeded();
     void externalChangeDetected(bool deleted, bool locallyModified);
+    // The open note was reloaded from disk; caret is where it was before.
+    void reloadedQuietly(int caret);
 
 private:
     friend class OmaZettelTest;
 
     void loadDocumentText(const QString &text);
+    void stampTaskDate(const QString &before, const QString &after);
     qreal steppedTextZoom(int direction) const;
     void setTextZoom(qreal zoom);
     void setFileUrl(const QUrl &url);
@@ -234,6 +241,7 @@ private:
     bool m_hasKnownFileContents = false;
     bool m_autoSaveSuspended = false;
     bool m_autoSaveHeld = false;
+    bool m_reloadsCleanFiles = false;
     QString m_recoveryPath;
     std::unique_ptr<QLockFile> m_recoveryLock;
 

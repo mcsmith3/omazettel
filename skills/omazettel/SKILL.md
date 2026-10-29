@@ -75,6 +75,8 @@ leaves `$`, backticks and `!` alone.
   `search`), or pass `--no-link-notes` when you are not sure the note should
   exist. Answers list any `linkedNotesCreated`; mention them.
 - **Tasks** are `- [ ] Owner: task (due)`; `tasks` finds them across notes.
+  To mark one done, tick it and add the day at the end, as the app does:
+  `- [x] Owner: task (due) (10/29/2026)` (MM/dd/yyyy).
 - Report the note's `path` back to the person, and the action items you wrote.
 
 ## Where notes go

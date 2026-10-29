@@ -18,6 +18,7 @@ HEADERS += \
     src/noteindex.h \
     src/layout.h \
     src/dashboard.h \
+    src/taskdates.h \
     src/moc.h \
     src/notetemplates.h \
     src/sync.h \

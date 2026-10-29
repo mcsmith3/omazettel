@@ -216,31 +216,23 @@ ApplicationWindow {
         return vault.rootPath + "/" + relative;
     }
 
-    // Ticks off a task from the dashboard. In the open note it changes the
-    // editor's text, so it saves like any edit (and can be undone); in other
-    // notes it changes the file.
+    // Ticks off a task from the dashboard, dated, in its file. The open note
+    // is saved first and reloaded after, so the editor shows the tick and
+    // auto-save never puts the old line back.
     function completeDashboardTask(task) {
-        if (dashboardPath(task.path) !== currentPath()) {
-            var error = dashboard.completeTask(task.path, task.line, task.text);
-            if (error.length > 0)
-                backend.showStatus(error);
-            return;
-        }
-        var lines = editor.text.split("\n");
-        var line = lines[task.line - 1];
-        var match = line !== undefined ? /^(\s*(?:[-*+]|\d+[.)])\s+\[) \]/.exec(line) : null;
-        if (!match || line.trim().slice(-task.text.length) !== task.text) {
-            backend.showStatus("The task has changed since the dashboard was drawn; it shows the note as it is now.");
+        var isOpenNote = dashboardPath(task.path) === currentPath();
+        if (isOpenNote && !backend.flushAutoSave()) {
+            backend.showStatus(backend.fileName + " has changes that aren't saved yet. Save it, then tick the task.");
             dashboard.refresh();
             return;
         }
-        var position = match[1].length;
-        for (var i = 0; i < task.line - 1; ++i)
-            position += lines[i].length + 1;
-        editor.remove(position, position + 1);
-        editor.insert(position, "x");
-        backend.flushAutoSave();
-        dashboard.refresh();
+        var caret = editor.cursorPosition;
+        if (isOpenNote)
+            backend.pauseFileWatching();
+        var error = dashboard.completeTask(task.path, task.line, task.text);
+        if (isOpenNote && backend.resumeFileWatching())
+            editor.cursorPosition = Math.min(caret, editor.length);
+        backend.showStatus(error.length > 0 ? error : "Done: " + task.text);
     }
 
     function showNotesSearch() {
@@ -1043,6 +1035,10 @@ ApplicationWindow {
             // open it was for is off; a later save must not carry it out.
             win.awaitingPendingSave = false;
             win.pendingAction = "";
+        }
+
+        function onReloadedQuietly(caret) {
+            editor.cursorPosition = Math.min(caret, editor.length);
         }
 
         function onExternalChangeDetected(deleted, locallyModified) {
@@ -2469,6 +2465,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        backend.setReloadsCleanFiles(true);
         var geometry = backend.windowGeometry();
         if (geometry.x >= 0) x = geometry.x;
         if (geometry.y >= 0) y = geometry.y;

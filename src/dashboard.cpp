@@ -3,6 +3,7 @@
 #include "layout.h"
 #include "moc.h"
 #include "sync.h"
+#include "taskdates.h"
 #include "noteindex.h"
 #include "notesapi.h"
 
@@ -159,8 +160,10 @@ QString Dashboard::completeTask(const QString &path, int line, const QString &te
     if (m_root.isEmpty() || !QFileInfo(file).canonicalFilePath().startsWith(QFileInfo(m_root).canonicalFilePath()))
         return QStringLiteral("That note is not in the notes folder.");
     const QString changed = tickTask(readText(file), line, text);
-    if (changed.isEmpty())
+    if (changed.isEmpty()) {
+        refresh();
         return QStringLiteral("The task has changed since the dashboard was drawn; it shows the note as it is now.");
+    }
     QSaveFile out(file);
     if (!out.open(QIODevice::WriteOnly) || out.write(changed.toUtf8()) < 0 || !out.commit()) {
         refresh();
@@ -172,14 +175,30 @@ QString Dashboard::completeTask(const QString &path, int line, const QString &te
     return {};
 }
 
-QString Dashboard::tickTask(const QString &noteText, int line, const QString &taskText) {
+QString Dashboard::tickTask(const QString &noteText, int line, const QString &taskText, const QDate &today) {
     QStringList lines = noteText.split(QLatin1Char('\n'));
-    if (line < 1 || line > lines.size())
+    auto isTheTask = [&](int index) {
+        const QRegularExpressionMatch match = taskLine().match(lines.at(index));
+        return match.hasMatch() && match.captured(1) == QLatin1String(" ") && match.captured(2) == taskText;
+    };
+    // The line the dashboard saw, or else the one open task with that text,
+    // when lines above it have changed since.
+    int found = line >= 1 && line <= lines.size() && isTheTask(line - 1) ? line - 1 : -1;
+    if (found < 0) {
+        for (int i = 0; i < lines.size(); ++i) {
+            if (!isTheTask(i))
+                continue;
+            if (found >= 0)
+                return {};
+            found = i;
+        }
+    }
+    if (found < 0)
         return {};
-    const QRegularExpressionMatch match = taskLine().match(lines.at(line - 1));
-    if (!match.hasMatch() || match.captured(1) != QLatin1String(" ") || match.captured(2) != taskText)
-        return {};
-    lines[line - 1][match.capturedStart(1)] = QLatin1Char('x');
+    const QString before = lines.at(found);
+    QString after = before;
+    after[taskLine().match(before).capturedStart(1)] = QLatin1Char('x');
+    lines[found] = TaskDates::applied(after, TaskDates::forBox(after, today));
     return lines.join(QLatin1Char('\n'));
 }
 

@@ -521,7 +521,9 @@ bool Backend::editorTextChanged() {
     const QString text = currentDocumentText();
     if (text == m_lastDocumentText)
         return false;
+    const QString previous = m_lastDocumentText;
     m_lastDocumentText = text;
+    stampTaskDate(previous, text);
 
     reapplyTypographyToChange();
 
@@ -1112,6 +1114,16 @@ void Backend::checkWatchedFile() {
     // the writer is still looking at the removal.
     if (m_fileMissing && wasMissing)
         return;
+    if (m_reloadsCleanFiles && !m_modified && !m_fileMissing) {
+        QFile file(m_fileUrl.toLocalFile());
+        if (file.open(QIODevice::ReadOnly) && savesUnchanged(file.readAll())) {
+            const int caret = m_caretPosition;
+            open(m_fileUrl);
+            setStatus(QStringLiteral("Updated %1: it changed outside OmaZettel").arg(fileName()));
+            emit reloadedQuietly(caret);
+            return;
+        }
+    }
     reportExternalChange(m_fileMissing);
 }
 

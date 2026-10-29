@@ -4,6 +4,7 @@
 #include "backend.h"
 #include "apptheme.h"
 #include "markdownhighlighter.h"
+#include "taskdates.h"
 #include "zettel.h"
 
 #include <QTextBlock>
@@ -13,6 +14,8 @@
 #include <QColor>
 #include <QDir>
 #include <QSettings>
+#include <QTextCursor>
+#include <QTimer>
 #include <QFile>
 #include <QFileInfo>
 
@@ -288,4 +291,54 @@ bool Backend::resumeFileWatching() {
     watchCurrentFile();
     reportExternalChange(!exists);
     return false;
+}
+
+// Ticking a task in the editor dates it, "- [x] Send it (10/29/2026)", and
+// unticking it takes the date off. Only an edit inside a task's box counts, so
+// pasting or typing a done task keeps the text as written. The change goes in
+// once the editor has finished with this one, as part of the same undo step.
+void Backend::stampTaskDate(const QString &before, const QString &after) {
+    if (!m_document)
+        return;
+    const int shorter = int(qMin(before.size(), after.size()));
+    int start = 0;
+    while (start < shorter && before.at(start) == after.at(start))
+        ++start;
+    int endBefore = int(before.size());
+    int endAfter = int(after.size());
+    while (endBefore > start && endAfter > start && before.at(endBefore - 1) == after.at(endAfter - 1)) {
+        --endBefore;
+        --endAfter;
+    }
+    if (before.mid(start, endBefore - start).contains(QLatin1Char('\n'))
+        || after.mid(start, endAfter - start).contains(QLatin1Char('\n')))
+        return;
+    const int lineStart = start == 0 ? 0 : int(after.lastIndexOf(QLatin1Char('\n'), start - 1)) + 1;
+    int lineEnd = int(after.indexOf(QLatin1Char('\n'), endAfter));
+    if (lineEnd < 0)
+        lineEnd = int(after.size());
+    const QString line = after.mid(lineStart, lineEnd - lineStart);
+    const int mark = TaskDates::markPosition(line);
+    // The edit touched only the box's mark: " " to "x", or the mark typed or
+    // deleted on its own.
+    if (mark < 0 || start - lineStart < mark || endAfter - lineStart > mark + 1 || endBefore - lineStart > mark + 1)
+        return;
+    const TaskDates::Edit edit = TaskDates::forBox(line, QDate::currentDate());
+    if (edit.at < 0)
+        return;
+    QPointer<QTextDocument> document = m_document;
+    QTimer::singleShot(0, this, [document, lineStart, line, edit]() {
+        if (!document)
+            return;
+        const QString now = document->toPlainText();
+        if (now.mid(lineStart, line.size()) != line
+            || (lineStart + line.size() < now.size() && now.at(lineStart + line.size()) != QLatin1Char('\n')))
+            return;
+        QTextCursor cursor(document);
+        cursor.setPosition(lineStart + edit.at);
+        cursor.setPosition(lineStart + edit.at + edit.remove, QTextCursor::KeepAnchor);
+        cursor.joinPreviousEditBlock();
+        cursor.insertText(edit.insert);
+        cursor.endEditBlock();
+    });
 }
