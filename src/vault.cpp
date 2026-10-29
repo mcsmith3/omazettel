@@ -113,13 +113,16 @@ void Vault::setMapsOfContent(bool on) {
         return;
     Moc::setEnabled(on);
     emit mapsOfContentChanged();
+    // Turned off: an update already due doesn't happen.
     if (on)
         m_mapsTimer.start();
+    else
+        m_mapsTimer.stop();
 }
 
 QStringList Vault::updateMaps() {
     m_mapsTimer.stop();
-    if (!isOpen())
+    if (!isOpen() || !mapsOfContent())
         return {};
     const QStringList written = Moc::update(m_rootPath);
     if (!written.isEmpty())

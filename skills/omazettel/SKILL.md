@@ -98,6 +98,8 @@ with `append` or `set-section`. Answers list any `mapsUpdated`.
 
 **Transcripts** go in `transcripts/` beside their meeting note
 (`transcribe --note` does this). Link the meeting note, not the transcript.
+**PDFs and exports** go in `assets/` beside their notes (`export` does this by
+default); `setup-layout --apply` moves older ones there and fixes links.
 
 Name files so they say when, what and how far along: date first for anything
 tied to a day (`2026-10-25-vendor-kickoff`), a status at the end for drafts
@@ -122,7 +124,17 @@ The transcript goes in a separate linked note in a `transcripts/` folder beside 
 omazettel transcribe ~/Downloads/standup.vtt --note --json        # AI picks the title
 omazettel transcribe call.m4a --note "Vendor kickoff" --json
 omazettel transcribe voxtype:latest --note --json                 # Voxtype's last meeting
+omazettel transcribe meeting-recorder:latest --note --json        # Meeting Recorder's newest meeting
+omazettel transcribe ~/Documents/Meetings/"202610291400 uci sync" --note --json
 ```
+
+Meeting Recorder keeps each meeting in `~/Documents/Meetings/<YYYYMMDDHHMM> <name>/`;
+give `transcribe` the folder (or `meeting-recorder:latest`). The note gets the
+meeting's date, named speakers and a link to the recording, and goes in the
+project's folder (`--project`, the project the meeting's name starts with, or
+the one the AI finds). A meeting that already has a note answers with
+`existing: true` and its path; pass `--again` only when the person wants a
+second note.
 
 The answer has `path`, `transcriptNote`, `actionItems` and `writtenBy`. If it fails with a
 message about a missing AI, speech model or sign-in, pass the message on: it

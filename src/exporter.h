@@ -21,6 +21,10 @@
 //                                        ${.}/../templates/<file>.
 //
 //   pandoc -d .omazettel/export/PDF.yaml note.md -o note.pdf
+// The folder beside notes for their PDFs and other exported files, as
+// transcripts/ is for transcripts.
+inline constexpr auto assetsFolderName = "assets";
+
 class Exporter : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -29,9 +33,10 @@ class Exporter : public QObject {
     Q_PROPERTY(QString templatesFolder READ templatesFolder NOTIFY changed)
     Q_PROPERTY(QString lastProfile READ lastProfile WRITE setLastProfile NOTIFY changed)
     Q_PROPERTY(int revision READ revision NOTIFY changed)
-    // Where exports go by default: "beside" the note (or in the folder, for
-    // a folder export) or "folder", the notes folder's Exports folder, which
-    // is kept out of git sync.
+    // Where exports go by default: "assets", an assets folder beside the
+    // note (or in the folder, for a folder export), so the folder shows its
+    // notes; "beside" the note; or "folder", the notes folder's Exports
+    // folder, which is kept out of git sync.
     Q_PROPERTY(QString exportLocation READ exportLocation WRITE setExportLocation NOTIFY changed)
 
 public:

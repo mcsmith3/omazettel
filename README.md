@@ -121,7 +121,7 @@ sudo pacman -S --needed base-devel git qt6-base qt6-declarative poppler-qt6 xdg-
 | Creating a private GitHub repository to sync with | `github-cli` | Then run `gh auth login` and `gh auth setup-git` once |
 | Editing Word or OpenDocument export styles | `libreoffice-fresh` | Opens reference documents |
 | Citations | none | Use a `.bib` or CSL JSON file, for example from Zotero with Better BibTeX |
-| Transcribing meeting recordings | `ffmpeg`, and Voxtype (Omarchy's dictation: `omarchy voxtype install`) or `whisper.cpp` (AUR) | With whisper.cpp, download a model once: `omazettel transcribe --download-model base.en`. Caption files (.vtt, .srt) and text transcripts need neither |
+| Transcribing meeting recordings | [Meeting Recorder](https://github.com/jankeesvw/omarchy-meeting-recorder) (`yay -S omarchy-meeting-recorder`), which also tells the speakers apart; or `ffmpeg` with Voxtype (Omarchy's dictation: `omarchy voxtype install`) or `whisper.cpp` (AUR) | With whisper.cpp, download a model once: `omazettel transcribe --download-model base.en`. Caption files (.vtt, .srt) and text transcripts need neither |
 | Meeting notes written by AI | An AI you already have: a coding agent (Claude Code, Codex, Gemini CLI, OpenCode, ...), Ollama, or an API key | On Omarchy, your default agent (`omarchy default agent`) is used. `omazettel ai` shows what is set up |
 
 ```sh
@@ -279,6 +279,10 @@ to date now with `omazettel maps --apply`.
 folder beside the meeting note, so the summary is what you see first. The two
 notes link each other, and transcripts are left out of the maps.
 
+**PDFs and exports** go in an `assets/` folder beside their notes, so each
+folder shows its notes; the sidebar lists `assets` like any folder, and PDFs
+there open in the PDF view.
+
 File names say when, what and how far along. Anything tied to a day starts with
 the date (`2026-10-25-kickoff`; the Daily and Meeting templates do this),
 drafts and outputs end with their status (`2026-10-25-q4-plan-final`), and
@@ -294,7 +298,9 @@ omazettel setup-layout --apply    # does it
 
 This moves `Daily`, `Meetings`, `Literature` and `Archive` into the layout,
 moves transcript notes into a `transcripts/` folder beside their meeting
-notes, points the templates there and rewrites links to match. It adds what's
+notes and PDFs and other exported files (`.pdf`, `.docx`, `.odt`, `.pptx`,
+`.epub`, `.rtf`) into an `assets/` folder beside theirs, points the templates
+there and rewrites links to match. It adds what's
 missing and never overwrites a file. Other folders stay where they are, and
 it lists them; move each one with `omazettel move <folder> 02-context` (or
 `03-projects`). Empty layout folders hold a hidden `.keep` file, so sync keeps
@@ -439,8 +445,9 @@ from all its notes and subfolders, like a Zettlr project: untick notes, reorder
 them, and give it a title and author. Each note's title becomes a chapter
 heading. Choices are saved in the folder's `.omazettel-project.yaml`.
 
-Exports are saved next to the note, or, if you choose in Settings, in an
-`Exports` folder that is kept out of git sync.
+Exports are saved in an `assets` folder beside the note, so the folder shows
+its notes and not their PDFs. In Settings you can save them next to the note
+instead, or in an `Exports` folder that is kept out of git sync.
 
 PDF export needs a LaTeX engine. The PDF profile uses XeLaTeX when
 `texlive-xetex` is installed (any font, any script), and pdflatex otherwise.
@@ -581,6 +588,7 @@ skips it).
 omazettel transcribe standup.vtt --note                    # the AI picks the title
 omazettel transcribe ~/Recordings/standup.m4a --note "Atlas standup"
 omazettel transcribe voxtype:latest --note                 # Voxtype's last recorded meeting
+omazettel transcribe meeting-recorder:latest --note        # Meeting Recorder's newest meeting
 ```
 
 OmaZettel reads the captions or transcript (Teams, Zoom and Meet `.vtt`/`.srt`,
@@ -593,9 +601,37 @@ beside it (`<meeting>-transcript`), and the two link to each other.
 the transcript note, and `-t` and `-f` choose another template or folder.
 Without `--note`, `transcribe` prints the transcript.
 
-*Transcribing recordings* uses Voxtype, Omarchy's dictation, with the model you
-set up for it (`omarchy voxtype install`, `omarchy voxtype model`), and
-otherwise [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+With the [folder layout](#folder-layout), the note goes in its project's
+folder: the one named with `--project`, else the project the meeting's name
+starts with ("uci demo planning" goes in `03-projects/uci/`), else the one the
+AI finds the meeting is about, else `03-projects/meetings/`.
+
+**Meeting Recorder.** [Meeting Recorder](https://github.com/jankeesvw/omarchy-meeting-recorder)
+records any call (your microphone and what the computer plays) without a bot
+joining, and tells the speakers apart. OmaZettel reads its meetings directly:
+give `transcribe` a meeting's folder, its `transcript.md`, or
+`meeting-recorder:latest`, and the note gets the meeting's own name, date and
+start time, the speakers you named as attendees, its chapters as a guide for
+the agenda, and a link to the recording. A meeting gets one note; running it
+again finds that note (`--again` writes another). To have every meeting
+become a note as soon as its transcript is done, add an action to
+`~/.config/omarchy-meeting-recorder/config.toml`:
+
+```toml
+[[action]]
+name = "Meeting note in OmaZettel"
+command = 'omazettel transcribe "$MEETING_DIR" --note --plain | grep "^Created"'
+auto = true
+```
+
+Name meetings after their project ("uci demo planning") and rename the
+speakers on Meeting Recorder's done page before the note is written, or run
+the action again from its Actions menu afterwards with `--again`.
+
+*Transcribing recordings* uses Meeting Recorder when it is installed, which
+labels the speakers ("Speaker 1", "Speaker 2"); then Voxtype, Omarchy's
+dictation, with the model you set up for it (`omarchy voxtype install`,
+`omarchy voxtype model`); and otherwise [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 (`yay -S whisper.cpp`, then `omazettel transcribe --download-model base.en`).
 Nothing is uploaded.
 

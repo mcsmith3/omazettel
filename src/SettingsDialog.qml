@@ -233,6 +233,12 @@ Dialog {
             // ── Export ──────────────────────────────────────────────────────
             Heading { text: "Export" }
             Check {
+                objectName: "exportsAssetsCheck"
+                checked: exporter.exportLocation === "assets"
+                text: "Save exports in an assets folder beside the note"
+                onToggled: exporter.exportLocation = "assets"
+            }
+            Check {
                 checked: exporter.exportLocation === "beside"
                 text: "Save exports next to the note"
                 onToggled: exporter.exportLocation = "beside"

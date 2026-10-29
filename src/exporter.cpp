@@ -88,7 +88,7 @@ void Exporter::setLastProfile(const QString &path) {
 }
 
 QString Exporter::exportLocation() const {
-    return QSettings().value(QStringLiteral("export/location"), QStringLiteral("beside")).toString();
+    return QSettings().value(QStringLiteral("export/location"), QStringLiteral("assets")).toString();
 }
 
 QString Exporter::exportsFolder() const {
@@ -96,7 +96,8 @@ QString Exporter::exportsFolder() const {
 }
 
 void Exporter::setExportLocation(const QString &location) {
-    const QString value = location == QLatin1String("folder") ? location : QStringLiteral("beside");
+    const QString value = location == QLatin1String("folder") || location == QLatin1String("beside")
+                              ? location : QStringLiteral("assets");
     if (value == exportLocation())
         return;
     QSettings().setValue(QStringLiteral("export/location"), value);
@@ -393,8 +394,10 @@ QString Exporter::newProfile(const QString &name, const QString &baseProfile, co
 QString Exporter::defaultOutputPath(const QString &notePath, const QString &profilePath) const {
     const QFileInfo note(notePath);
     const QString extension = extensionFor(formatOf(readText(profilePath)));
-    const QDir folder = exportLocation() == QLatin1String("folder") && !m_root.isEmpty()
-        ? QDir(exportsFolder()) : note.absoluteDir();
+    const QString location = exportLocation();
+    const QDir folder = location == QLatin1String("folder") && !m_root.isEmpty() ? QDir(exportsFolder())
+                        : location == QLatin1String("assets") ? QDir(note.absoluteDir().filePath(QLatin1String(assetsFolderName)))
+                                                              : note.absoluteDir();
     return folder.filePath(note.completeBaseName() + QLatin1Char('.') + extension);
 }
 
@@ -667,8 +670,10 @@ bool Exporter::saveFolderSettings(const QString &folder, const QVariantList &ent
 
 QString Exporter::defaultFolderOutputPath(const QString &folder, const QString &profilePath) const {
     const QString extension = extensionFor(formatOf(readText(profilePath)));
-    const QDir target = exportLocation() == QLatin1String("folder") && !m_root.isEmpty()
-        ? QDir(exportsFolder()) : QDir(folder);
+    const QString location = exportLocation();
+    const QDir target = location == QLatin1String("folder") && !m_root.isEmpty() ? QDir(exportsFolder())
+                        : location == QLatin1String("assets") ? QDir(QDir(folder).filePath(QLatin1String(assetsFolderName)))
+                                                              : QDir(folder);
     return target.filePath(QFileInfo(folder).fileName() + QLatin1Char('.') + extension);
 }
 

@@ -984,9 +984,11 @@ private slots:
         QFile::remove(profiles.at(0).toMap().value(QStringLiteral("path")).toString());
         exporter.ensureDefaults();
         QCOMPARE(exporter.profiles().size(), 4);
+        // Exports go in an assets folder beside the note, unless chosen otherwise.
+        QCOMPARE(exporter.exportLocation(), QStringLiteral("assets"));
         QCOMPARE(exporter.defaultOutputPath(dir.filePath(QStringLiteral("Sub/My note.md")),
                                             profiles.at(4).toMap().value(QStringLiteral("path")).toString()),
-                 dir.filePath(QStringLiteral("Sub/My note.docx")));
+                 dir.filePath(QStringLiteral("Sub/assets/My note.docx")));
 
         const QString none = Exporter::starterProfiles(QString()).first().second;
         QVERIFY(none.contains(QStringLiteral("texlive-xetex")));
@@ -1117,12 +1119,12 @@ private slots:
                 QMetaObject::invokeMethod(dialog, "updateOutput");
             }
         }
-        QCOMPARE(dialog->property("outputPath").toString(), dir.filePath(QStringLiteral("Open.html")));
+        QCOMPARE(dialog->property("outputPath").toString(), dir.filePath(QStringLiteral("assets/Open.html")));
         QSignalSpy finished(m_windowExporter.get(), &Exporter::finished);
         QMetaObject::invokeMethod(dialog, "runExport");
         QVERIFY(finished.wait(30000));
         QCOMPARE(dialog->property("resultState").toString(), QStringLiteral("ok"));
-        QVERIFY(readFile(dir.filePath(QStringLiteral("Open.html"))).contains(QStringLiteral("Not saved yet")));
+        QVERIFY(readFile(dir.filePath(QStringLiteral("assets/Open.html"))).contains(QStringLiteral("Not saved yet")));
         QCOMPARE(m_windowExporter->lastProfile(), profiles.at(0).toMap().value(QStringLiteral("path")).toString());
     }
 
@@ -1329,7 +1331,7 @@ private slots:
         writeFile(dir.filePath(QStringLiteral("Book/2 Middle.md")), "# Middle\n\nSecond.\n");
         const QString folder = dir.filePath(QStringLiteral("Book"));
         const QString html = exporter.defaultFolderOutputPath(folder, exporter.profilesFolder() + QStringLiteral("/HTML.yaml"));
-        QCOMPARE(html, dir.filePath(QStringLiteral("Book/Book.html")));
+        QCOMPARE(html, dir.filePath(QStringLiteral("Book/assets/Book.html")));
         QSignalSpy finished(&exporter, &Exporter::finished);
         QVERIFY(exporter.exportFolder(folder, {dir.filePath(QStringLiteral("Book/1 Start.md")),
                                                dir.filePath(QStringLiteral("Book/2 Middle.md"))},
@@ -1909,7 +1911,9 @@ private slots:
         exporter.setRoot(root);
         exporter.ensureDefaults();
         const QString pdf = exporter.profilesFolder() + QStringLiteral("/PDF.yaml");
+        QCOMPARE(exporter.defaultFolderOutputPath(root + QStringLiteral("/Sub"), pdf), root + QStringLiteral("/Sub/assets/Sub.pdf"));
         exporter.setExportLocation(QStringLiteral("beside"));
+        QCOMPARE(exporter.exportLocation(), QStringLiteral("beside"));
         QCOMPARE(exporter.defaultOutputPath(root + QStringLiteral("/Sub/N.md"), pdf), root + QStringLiteral("/Sub/N.pdf"));
         exporter.setExportLocation(QStringLiteral("folder"));
         QCOMPARE(exporter.exportLocation(), QStringLiteral("folder"));
@@ -1919,7 +1923,52 @@ private slots:
         exporter.setExportLocation(QStringLiteral("beside"));
         exporter.setExportLocation(QStringLiteral("folder"));
         QCOMPARE(readFile(root + QStringLiteral("/.gitignore")).count(QStringLiteral("/Exports/")), 1);
-        exporter.setExportLocation(QStringLiteral("beside"));
+        exporter.setExportLocation(QStringLiteral("assets"));
+        QCOMPARE(exporter.defaultOutputPath(root + QStringLiteral("/Sub/N.md"), pdf), root + QStringLiteral("/Sub/assets/N.pdf"));
+    }
+
+    void setupLayoutMovesPdfsIntoAssets() {
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        Layout::create(root);
+        writeFile(root + QStringLiteral("/03-projects/vdem/plan.md"), "# Plan\n\nThe [deck](Deck.pdf#page=2), the [brief](<Brief.docx>), [old](../../99-archive/old/Rfp.pdf) and [web](https://x.org/Deck.pdf).\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/Deck.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/Brief.docx"), "x");
+        writeFile(root + QStringLiteral("/03-projects/vdem/assets/Old.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/99-archive/old/Rfp.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/photo.png"), "x");
+        writeFile(root + QStringLiteral("/Exports/plan.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/.hidden/x.pdf"), "%PDF-1.4\n");
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root, &error));
+        const NotesApi::Tool &tool = *NotesApi::toolNamed(QStringLiteral("setup_layout"));
+
+        auto targets = [](const QJsonObject &result) {
+            QStringList to;
+            for (const QJsonValue &move : result.value(QStringLiteral("assets")).toArray())
+                to.append(move.toObject().value(QStringLiteral("to")).toString());
+            return to;
+        };
+        const QStringList expected{QStringLiteral("03-projects/vdem/assets/Brief.docx"), QStringLiteral("03-projects/vdem/assets/Deck.pdf"),
+                                   QStringLiteral("99-archive/old/assets/Rfp.pdf")};
+        // A preview moves nothing.
+        QCOMPARE(targets(api.call(tool, {})), expected);
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/03-projects/vdem/Deck.pdf")));
+
+        const QJsonObject applied = api.call(tool, {{QStringLiteral("apply"), true}});
+        QCOMPARE(targets(applied), expected);
+        for (const QString &to : expected)
+            QVERIFY2(QFileInfo::exists(root + QLatin1Char('/') + to), qPrintable(to));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/03-projects/vdem/photo.png")));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/Exports/plan.pdf")));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/.hidden/x.pdf")));
+        const QString plan = readFile(root + QStringLiteral("/03-projects/vdem/plan.md"));
+        QVERIFY2(plan.contains(QStringLiteral("The [deck](assets/Deck.pdf#page=2), the [brief](<assets/Brief.docx>), "
+                                              "[old](../../99-archive/old/assets/Rfp.pdf) and [web](https://x.org/Deck.pdf).")),
+                 qPrintable(plan));
+        // Done once.
+        QVERIFY(targets(api.call(tool, {})).isEmpty());
     }
 
     void autoCreatingLinkedNotesCanBeTurnedOff() {
@@ -3169,6 +3218,119 @@ private slots:
             refused = failure.message.contains(QStringLiteral("openai:<model>"));
         }
         QVERIFY(refused);
+    }
+
+    void turnsMeetingRecorderMeetingsIntoNotes() {
+        // A stand-in "claude" that gives the answer in answer.json.
+        QTemporaryDir bin;
+        const QString fake = bin.filePath(QStringLiteral("claude"));
+        writeFile(fake, "#!/bin/sh\ncat > \"" + bin.filePath(QStringLiteral("seen.txt")).toUtf8() + "\"\ncat \""
+                            + bin.filePath(QStringLiteral("answer.json")).toUtf8() + "\"\n");
+        QFile(fake).setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        auto answer = [&bin](const QByteArray &json) { writeFile(bin.filePath(QStringLiteral("answer.json")), json); };
+        const QByteArray oldPath = qgetenv("PATH");
+        qputenv("PATH", bin.path().toUtf8() + ':' + oldPath);
+        QTemporaryDir meetingsDir;
+        const QString meetings = QFileInfo(meetingsDir.path()).canonicalFilePath();
+        qputenv("OMAZETTEL_MEETINGS", meetings.toUtf8());
+        const auto restore = qScopeGuard([&oldPath] {
+            qputenv("PATH", oldPath);
+            qunsetenv("OMAZETTEL_MEETINGS");
+        });
+
+        // A meeting as Meeting Recorder keeps it, and a newer one still
+        // being transcribed.
+        const QString folder = meetings + QStringLiteral("/202610201000 uci Demo planning");
+        const QDateTime started(QDate(2026, 10, 20), QTime(10, 0));
+        writeFile(folder + QStringLiteral("/uci Demo planning.meeting-recorder"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("title"), QStringLiteral("uci Demo planning")},
+                                            {QStringLiteral("started_at"), started.toSecsSinceEpoch()},
+                                            {QStringLiteral("duration_secs"), 360},
+                                            {QStringLiteral("speakers"), QJsonArray{QStringLiteral("Matt"), QStringLiteral("Ann")}},
+                                            {QStringLiteral("labels"), QJsonArray{QStringLiteral("You"), QStringLiteral("Remote")}},
+                                            {QStringLiteral("chapters"), QJsonArray{
+                                                QJsonObject{{QStringLiteral("start_ms"), 0}, {QStringLiteral("title"), QStringLiteral("Dates")}},
+                                                QJsonObject{{QStringLiteral("start_ms"), 61000}, {QStringLiteral("title"), QStringLiteral("Migration")}}}}})
+                      .toJson());
+        writeFile(folder + QStringLiteral("/transcript.md"),
+                  "# uci Demo planning\n\n2026-10-20 10:00 · 6 minutes\n\n## Chapters\n\n- [00:00] Dates\n- [01:01] Migration\n\n"
+                  "## Transcript\n\n**[00:00] Matt:** When is the demo?\n\n**[00:05] Ann:** The 14th,\nif the data comes Friday.\n\n"
+                  "**[01:01] Remote 2:** Archived records wait.\n");
+        writeFile(meetings + QStringLiteral("/202610291500 Meeting 15:00/Meeting 15:00.meeting-recorder"), "{}");
+
+        // Reading it.
+        QStringList named;
+        QCOMPARE(Transcriber::fromMeetingRecorder(readFile(folder + QStringLiteral("/transcript.md")), false, &named),
+                 QStringLiteral("Matt: When is the demo?\n\nAnn: The 14th, if the data comes Friday.\n\nRemote 2: Archived records wait."));
+        QCOMPARE(named, (QStringList{QStringLiteral("Matt"), QStringLiteral("Ann")}));
+        QVERIFY(Transcriber::fromMeetingRecorder(QStringLiteral("## Transcript\n\n**[1:02:03] Bo:** Late.\n"), true)
+                    == QStringLiteral("[1:02:03] Bo: Late."));
+        for (const QString &way : {folder, folder + QStringLiteral("/transcript.md"), folder + QStringLiteral("/uci Demo planning.meeting-recorder"),
+                                   QStringLiteral("meeting-recorder:latest"), QStringLiteral("meeting-recorder:demo")})
+            QCOMPARE(Transcriber::meetingRecorderFolder(way), folder);
+        QCOMPARE(Transcriber::meetingRecorderFolder(meetings), QString());
+
+        QTemporaryDir rootDir;
+        const QString root = QFileInfo(rootDir.path()).canonicalFilePath();
+        Layout::create(root);
+        writeFile(root + QStringLiteral("/03-projects/uci/00-brief.md"), "# UCI\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/00-brief.md"), "# VDEM\n");
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root, &error));
+        auto transcribe = [&api](const QJsonObject &args) {
+            return api.call(*NotesApi::toolNamed(QStringLiteral("transcribe")), args);
+        };
+
+        // The AI guesses another project and attendee; the meeting's own
+        // name and speakers win.
+        answer("{\"title\":\"Ignored\",\"summary\":\"Demo on the 14th.\",\"attendees\":[\"Someone\"],\"project\":\"vdem\","
+               "\"tags\":[\"demo\"],\"sections\":{\"Agenda\":\"- Dates\",\"Action items\":\"- [ ] Matt: send data (Fri)\"}}");
+        const QJsonObject made = transcribe({{QStringLiteral("file"), folder}, {QStringLiteral("note"), QString()},
+                                             {QStringLiteral("ai"), QStringLiteral("claude")}});
+        const QString path = made.value(QStringLiteral("path")).toString();
+        QVERIFY2(path.startsWith(QStringLiteral("03-projects/uci/")) && path.endsWith(QStringLiteral("uci-Demo-planning.md")), qPrintable(path));
+        QVERIFY(path.contains(QStringLiteral("2026-10-20")));
+        const QString text = readFile(root + QLatin1Char('/') + path);
+        QVERIFY2(text.contains(QStringLiteral("date: \"2026-10-20\"")), qPrintable(text));
+        QVERIFY(text.contains(QStringLiteral("attendees: [\"Matt\", \"Ann\"]")));
+        QVERIFY(text.contains(QStringLiteral("recording: \"%1\"").arg(folder)));
+        QVERIFY(text.contains(QStringLiteral("20 October 2026, 10:00")));
+        QVERIFY2(text.contains(QStringLiteral("**Attendees:** Matt, Ann  \n**Recording:** [202610201000 uci Demo planning](%1)\n")
+                                   .arg(QUrl::fromLocalFile(folder).toString(QUrl::FullyEncoded))), qPrintable(text));
+        QVERIFY(text.contains(QStringLiteral("- [ ] Matt: send data (Fri)")));
+        QVERIFY(made.value(QStringLiteral("transcriptNote")).toString().startsWith(QStringLiteral("03-projects/uci/transcripts/")));
+        const QString prompt = readFile(bin.filePath(QStringLiteral("seen.txt")));
+        QVERIFY(prompt.contains(QStringLiteral("[00:00] Dates; [01:01] Migration")));
+        QVERIFY(prompt.contains(QStringLiteral("Matt: When is the demo?")));
+        QVERIFY(!prompt.contains(QStringLiteral("\"project\":")));
+
+        // Again (Transcribe again runs the action again): the note it has.
+        const QJsonObject again = transcribe({{QStringLiteral("file"), folder + QStringLiteral("/transcript.md")},
+                                              {QStringLiteral("note"), QString()}, {QStringLiteral("ai"), QStringLiteral("claude")}});
+        QVERIFY(again.value(QStringLiteral("existing")).toBool());
+        QCOMPARE(again.value(QStringLiteral("path")).toString(), path);
+        QVERIFY(again.value(QStringLiteral("message")).toString().startsWith(QStringLiteral("Created %1 earlier").arg(path)));
+
+        // A meeting nobody named: the AI's title, and the project it finds.
+        const QString unnamed = meetings + QStringLiteral("/202610211400 Meeting 14:00");
+        writeFile(unnamed + QStringLiteral("/Meeting 14:00.meeting-recorder"),
+                  "{\"title\":\"Meeting 14:00\",\"started_at\":0,\"speakers\":[\"You\",\"Remote\"],\"labels\":[\"You\",\"Remote\"],\"chapters\":[]}");
+        writeFile(unnamed + QStringLiteral("/transcript.md"), "## Transcript\n\n**[00:00] You:** Budget module scope?\n");
+        answer("{\"title\":\"Budget scope\",\"attendees\":[],\"project\":\"vdem\",\"sections\":{}}");
+        const QJsonObject guessed = transcribe({{QStringLiteral("file"), unnamed}, {QStringLiteral("note"), QString()},
+                                                {QStringLiteral("ai"), QStringLiteral("claude")}});
+        QVERIFY2(guessed.value(QStringLiteral("path")).toString().startsWith(QStringLiteral("03-projects/vdem/")),
+                 qPrintable(guessed.value(QStringLiteral("path")).toString()));
+        QVERIFY(guessed.value(QStringLiteral("path")).toString().endsWith(QStringLiteral("Budget-scope.md")));
+        QVERIFY(readFile(bin.filePath(QStringLiteral("seen.txt"))).contains(QStringLiteral("exactly one of: uci, vdem")));
+
+        // A project that isn't one: the meetings folder.
+        QVERIFY(QFile::remove(root + QLatin1Char('/') + guessed.value(QStringLiteral("path")).toString()));
+        answer("{\"title\":\"Budget scope\",\"attendees\":[],\"project\":\"nope\",\"sections\":{}}");
+        const QJsonObject unsure = transcribe({{QStringLiteral("file"), unnamed}, {QStringLiteral("note"), QString()},
+                                               {QStringLiteral("ai"), QStringLiteral("claude")}, {QStringLiteral("again"), true}});
+        QVERIFY(unsure.value(QStringLiteral("path")).toString().startsWith(QStringLiteral("03-projects/meetings/")));
     }
 
     void explainsSyncFailures() {
