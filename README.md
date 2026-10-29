@@ -396,9 +396,10 @@ editor. Click a note, or press Esc, to go back to writing.
   [folder layout](#folder-layout), each top-level folder) with its notes, open
   tasks and when it last changed. Click one to open its map of content.
 - **Open tasks**: every `- [ ]` task in your notes, grouped by note, newest
-  notes first. Click the box to tick it off (in the note open in the editor
-  this is an ordinary edit, so Ctrl+Z undoes it), or the task to open its note
-  there. Type in the filter to show only tasks with a name, word or project in
+  notes first. Click the box to tick it off, or the task to open its note
+  there. A ticked task is saved in its note straight away, with the day it was
+  done: `- [x] Send the deck (10/29/2026)`. Ticking a task in the note itself
+  (an `x` in the box) adds the date too, and unticking it takes the date off. Type in the filter to show only tasks with a name, word or project in
   them, such as everything assigned to you.
 - **Needs a look**: links to notes that don't exist, notes no other note links
   to (links from maps of content don't count; daily notes, transcripts, the
@@ -499,7 +500,9 @@ To start syncing for the first time:
 3. **Sync** happens when OmaZettel starts, every 5 minutes (adjustable), and on
    **Ctrl+Alt+S** or the sync button. It saves your changes as a version,
    merges the other side's (never rewriting history) and sends yours. The open
-   note is saved first and reloads quietly if the sync changed it.
+   note is saved first and reloads quietly if the sync changed it. The same
+   goes for any change from outside OmaZettel, such as an AI agent editing the
+   open note; only when you have unsaved edits does it ask which to keep.
 
 **When a sync fails**, the sidebar's status line says so; click it (or sync
 by hand) and Sync & history says why and what to do: sign in, add an SSH key,

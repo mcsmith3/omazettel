@@ -52,9 +52,12 @@ public:
     static Snapshot snapshot(const NoteIndex &index, const QString &root);
     // Everything the dashboard shows, for the days up to today.
     static QJsonObject build(const QString &root, const Snapshot &snapshot, int days, const QDate &today);
-    // Changes "- [ ]" to "- [x]" on line (1-based) when it is the open task
-    // text. Returns the new text, or "" when the line is not that task.
-    static QString tickTask(const QString &noteText, int line, const QString &taskText);
+    // Ticks the open task with this text: "- [ ] Send it" becomes
+    // "- [x] Send it (10/29/2026)". It looks on line (1-based) first, then for
+    // the one open task with the text, should lines above have changed.
+    // Returns the new text, or "" when there is no such task (or several).
+    static QString tickTask(const QString &noteText, int line, const QString &taskText,
+                            const QDate &today = QDate::currentDate());
 
 signals:
     void dataChanged();
