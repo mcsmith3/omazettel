@@ -279,6 +279,10 @@ to date now with `omazettel maps --apply`.
 folder beside the meeting note, so the summary is what you see first. The two
 notes link each other, and transcripts are left out of the maps.
 
+**PDFs and exports** go in an `assets/` folder beside their notes, so each
+folder shows its notes; the sidebar lists `assets` like any folder, and PDFs
+there open in the PDF view.
+
 File names say when, what and how far along. Anything tied to a day starts with
 the date (`2026-10-25-kickoff`; the Daily and Meeting templates do this),
 drafts and outputs end with their status (`2026-10-25-q4-plan-final`), and
@@ -294,7 +298,9 @@ omazettel setup-layout --apply    # does it
 
 This moves `Daily`, `Meetings`, `Literature` and `Archive` into the layout,
 moves transcript notes into a `transcripts/` folder beside their meeting
-notes, points the templates there and rewrites links to match. It adds what's
+notes and PDFs and other exported files (`.pdf`, `.docx`, `.odt`, `.pptx`,
+`.epub`, `.rtf`) into an `assets/` folder beside theirs, points the templates
+there and rewrites links to match. It adds what's
 missing and never overwrites a file. Other folders stay where they are, and
 it lists them; move each one with `omazettel move <folder> 02-context` (or
 `03-projects`). Empty layout folders hold a hidden `.keep` file, so sync keeps
@@ -439,8 +445,9 @@ from all its notes and subfolders, like a Zettlr project: untick notes, reorder
 them, and give it a title and author. Each note's title becomes a chapter
 heading. Choices are saved in the folder's `.omazettel-project.yaml`.
 
-Exports are saved next to the note, or, if you choose in Settings, in an
-`Exports` folder that is kept out of git sync.
+Exports are saved in an `assets` folder beside the note, so the folder shows
+its notes and not their PDFs. In Settings you can save them next to the note
+instead, or in an `Exports` folder that is kept out of git sync.
 
 PDF export needs a LaTeX engine. The PDF profile uses XeLaTeX when
 `texlive-xetex` is installed (any font, any script), and pdflatex otherwise.

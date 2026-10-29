@@ -147,6 +147,9 @@ private:
     // The project folders a meeting may belong to (03-projects/<name>), not
     // the daily and meetings folders; empty without the folder layout.
     QStringList projectNames() const;
+    // Markdown links ([text](file), ![](file)) in every note to a file (not a
+    // note) that moves from one absolute path to another. Returns how many.
+    int rewriteFileLinks(const QString &from, const QString &to);
 
     // Paths.
     QString relative(const QString &path) const;

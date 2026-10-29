@@ -114,7 +114,8 @@ QString guide() {
         "searched, moved there rather than deleted. Maps of content: 03-projects/projects-moc links each "
         "project's map (03-projects/<project>/<project>-moc), which lists the project's notes; OmaZettel keeps "
         "them up to date, so don't edit between their marker comments. Transcripts live in a transcripts/ "
-        "folder beside their meeting note and are left out of the maps. File names say when, what and how far along: "
+        "folder beside their meeting note and are left out of the maps; PDFs and other exported files live in an "
+        "assets/ folder beside their notes. File names say when, what and how far along: "
         "date first for anything tied to a day (2026-10-25-kickoff, and 2026-10-25-q4-plan-final in "
         "04-outputs), plain topic names for lasting ideas so [[links]] read well.");
 }
@@ -140,6 +141,7 @@ QString starterRules() {
         "- Maps of content: `03-projects/projects-moc` links each project's map (`<project>-moc`), which\n"
         "  lists the project's notes. OmaZettel keeps the lists up to date; don't edit between their markers.\n"
         "- Transcripts go in a `transcripts/` folder beside their meeting note and stay out of the maps.\n"
+        "- PDFs and other exported files go in an `assets/` folder beside their notes.\n"
         "- `04-outputs/`: finished work, ready to send or publish.\n"
         "- `99-archive/`: finished or dropped projects. Move them here instead of deleting them.\n"
         "\n"

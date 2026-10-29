@@ -984,9 +984,11 @@ private slots:
         QFile::remove(profiles.at(0).toMap().value(QStringLiteral("path")).toString());
         exporter.ensureDefaults();
         QCOMPARE(exporter.profiles().size(), 4);
+        // Exports go in an assets folder beside the note, unless chosen otherwise.
+        QCOMPARE(exporter.exportLocation(), QStringLiteral("assets"));
         QCOMPARE(exporter.defaultOutputPath(dir.filePath(QStringLiteral("Sub/My note.md")),
                                             profiles.at(4).toMap().value(QStringLiteral("path")).toString()),
-                 dir.filePath(QStringLiteral("Sub/My note.docx")));
+                 dir.filePath(QStringLiteral("Sub/assets/My note.docx")));
 
         const QString none = Exporter::starterProfiles(QString()).first().second;
         QVERIFY(none.contains(QStringLiteral("texlive-xetex")));
@@ -1117,12 +1119,12 @@ private slots:
                 QMetaObject::invokeMethod(dialog, "updateOutput");
             }
         }
-        QCOMPARE(dialog->property("outputPath").toString(), dir.filePath(QStringLiteral("Open.html")));
+        QCOMPARE(dialog->property("outputPath").toString(), dir.filePath(QStringLiteral("assets/Open.html")));
         QSignalSpy finished(m_windowExporter.get(), &Exporter::finished);
         QMetaObject::invokeMethod(dialog, "runExport");
         QVERIFY(finished.wait(30000));
         QCOMPARE(dialog->property("resultState").toString(), QStringLiteral("ok"));
-        QVERIFY(readFile(dir.filePath(QStringLiteral("Open.html"))).contains(QStringLiteral("Not saved yet")));
+        QVERIFY(readFile(dir.filePath(QStringLiteral("assets/Open.html"))).contains(QStringLiteral("Not saved yet")));
         QCOMPARE(m_windowExporter->lastProfile(), profiles.at(0).toMap().value(QStringLiteral("path")).toString());
     }
 
@@ -1329,7 +1331,7 @@ private slots:
         writeFile(dir.filePath(QStringLiteral("Book/2 Middle.md")), "# Middle\n\nSecond.\n");
         const QString folder = dir.filePath(QStringLiteral("Book"));
         const QString html = exporter.defaultFolderOutputPath(folder, exporter.profilesFolder() + QStringLiteral("/HTML.yaml"));
-        QCOMPARE(html, dir.filePath(QStringLiteral("Book/Book.html")));
+        QCOMPARE(html, dir.filePath(QStringLiteral("Book/assets/Book.html")));
         QSignalSpy finished(&exporter, &Exporter::finished);
         QVERIFY(exporter.exportFolder(folder, {dir.filePath(QStringLiteral("Book/1 Start.md")),
                                                dir.filePath(QStringLiteral("Book/2 Middle.md"))},
@@ -1909,7 +1911,9 @@ private slots:
         exporter.setRoot(root);
         exporter.ensureDefaults();
         const QString pdf = exporter.profilesFolder() + QStringLiteral("/PDF.yaml");
+        QCOMPARE(exporter.defaultFolderOutputPath(root + QStringLiteral("/Sub"), pdf), root + QStringLiteral("/Sub/assets/Sub.pdf"));
         exporter.setExportLocation(QStringLiteral("beside"));
+        QCOMPARE(exporter.exportLocation(), QStringLiteral("beside"));
         QCOMPARE(exporter.defaultOutputPath(root + QStringLiteral("/Sub/N.md"), pdf), root + QStringLiteral("/Sub/N.pdf"));
         exporter.setExportLocation(QStringLiteral("folder"));
         QCOMPARE(exporter.exportLocation(), QStringLiteral("folder"));
@@ -1919,7 +1923,52 @@ private slots:
         exporter.setExportLocation(QStringLiteral("beside"));
         exporter.setExportLocation(QStringLiteral("folder"));
         QCOMPARE(readFile(root + QStringLiteral("/.gitignore")).count(QStringLiteral("/Exports/")), 1);
-        exporter.setExportLocation(QStringLiteral("beside"));
+        exporter.setExportLocation(QStringLiteral("assets"));
+        QCOMPARE(exporter.defaultOutputPath(root + QStringLiteral("/Sub/N.md"), pdf), root + QStringLiteral("/Sub/assets/N.pdf"));
+    }
+
+    void setupLayoutMovesPdfsIntoAssets() {
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        Layout::create(root);
+        writeFile(root + QStringLiteral("/03-projects/vdem/plan.md"), "# Plan\n\nThe [deck](Deck.pdf#page=2), the [brief](<Brief.docx>), [old](../../99-archive/old/Rfp.pdf) and [web](https://x.org/Deck.pdf).\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/Deck.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/Brief.docx"), "x");
+        writeFile(root + QStringLiteral("/03-projects/vdem/assets/Old.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/99-archive/old/Rfp.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/03-projects/vdem/photo.png"), "x");
+        writeFile(root + QStringLiteral("/Exports/plan.pdf"), "%PDF-1.4\n");
+        writeFile(root + QStringLiteral("/.hidden/x.pdf"), "%PDF-1.4\n");
+        NotesApi api;
+        QString error;
+        QVERIFY(api.open(root, &error));
+        const NotesApi::Tool &tool = *NotesApi::toolNamed(QStringLiteral("setup_layout"));
+
+        auto targets = [](const QJsonObject &result) {
+            QStringList to;
+            for (const QJsonValue &move : result.value(QStringLiteral("assets")).toArray())
+                to.append(move.toObject().value(QStringLiteral("to")).toString());
+            return to;
+        };
+        const QStringList expected{QStringLiteral("03-projects/vdem/assets/Brief.docx"), QStringLiteral("03-projects/vdem/assets/Deck.pdf"),
+                                   QStringLiteral("99-archive/old/assets/Rfp.pdf")};
+        // A preview moves nothing.
+        QCOMPARE(targets(api.call(tool, {})), expected);
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/03-projects/vdem/Deck.pdf")));
+
+        const QJsonObject applied = api.call(tool, {{QStringLiteral("apply"), true}});
+        QCOMPARE(targets(applied), expected);
+        for (const QString &to : expected)
+            QVERIFY2(QFileInfo::exists(root + QLatin1Char('/') + to), qPrintable(to));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/03-projects/vdem/photo.png")));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/Exports/plan.pdf")));
+        QVERIFY(QFileInfo::exists(root + QStringLiteral("/.hidden/x.pdf")));
+        const QString plan = readFile(root + QStringLiteral("/03-projects/vdem/plan.md"));
+        QVERIFY2(plan.contains(QStringLiteral("The [deck](assets/Deck.pdf#page=2), the [brief](<assets/Brief.docx>), "
+                                              "[old](../../99-archive/old/assets/Rfp.pdf) and [web](https://x.org/Deck.pdf).")),
+                 qPrintable(plan));
+        // Done once.
+        QVERIFY(targets(api.call(tool, {})).isEmpty());
     }
 
     void autoCreatingLinkedNotesCanBeTurnedOff() {

@@ -98,6 +98,8 @@ with `append` or `set-section`. Answers list any `mapsUpdated`.
 
 **Transcripts** go in `transcripts/` beside their meeting note
 (`transcribe --note` does this). Link the meeting note, not the transcript.
+**PDFs and exports** go in `assets/` beside their notes (`export` does this by
+default); `setup-layout --apply` moves older ones there and fixes links.
 
 Name files so they say when, what and how far along: date first for anything
 tied to a day (`2026-10-25-vendor-kickoff`), a status at the end for drafts

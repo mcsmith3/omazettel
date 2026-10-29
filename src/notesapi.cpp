@@ -12,6 +12,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -1616,6 +1617,47 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
         lines.append(QStringLiteral("  move %1 -> %2").arg(target, to));
     }
 
+    // PDFs and other exported files go in an assets folder beside their
+    // notes, so a folder shows its notes; links to them follow.
+    QJsonArray assets;
+    static const QStringList assetKinds{QStringLiteral("pdf"), QStringLiteral("docx"), QStringLiteral("odt"),
+                                        QStringLiteral("pptx"), QStringLiteral("epub"), QStringLiteral("rtf")};
+    QStringList files;
+    QDirIterator walk(m_root, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (walk.hasNext()) {
+        const QString rel = relative(walk.next());
+        const QStringList parts = rel.split(QLatin1Char('/'));
+        bool hidden = false;
+        for (const QString &part : parts)
+            hidden = hidden || part.startsWith(QLatin1Char('.'));
+        const QString parent = parts.size() > 1 ? parts.at(parts.size() - 2) : QString();
+        if (hidden || !assetKinds.contains(QFileInfo(rel).suffix().toLower())
+                || parent.compare(QLatin1String(assetsFolderName), Qt::CaseInsensitive) == 0
+                || parts.first() == QLatin1String("Exports"))
+            continue;
+        files.append(rel);
+    }
+    std::sort(files.begin(), files.end());
+    for (const QString &rel : std::as_const(files)) {
+        QString target = rel;
+        for (const QJsonValue &m : std::as_const(moved)) {
+            const QString from = m.toObject().value(QStringLiteral("from")).toString() + QLatin1Char('/');
+            if (target.startsWith(from))
+                target = m.toObject().value(QStringLiteral("to")).toString() + QLatin1Char('/') + target.mid(from.size());
+        }
+        const QFileInfo info(target);
+        const QString to = (info.path() == QLatin1String(".") ? QString() : info.path() + QLatin1Char('/'))
+                           + QLatin1String(assetsFolderName) + QLatin1Char('/') + info.fileName();
+        if (QFileInfo::exists(root.filePath(to)))
+            continue;
+        if (apply) {
+            rewriteFileLinks(root.filePath(target), root.filePath(to));
+            relocate(root.filePath(target), root.filePath(to));
+        }
+        assets.append(QJsonObject{{QStringLiteral("from"), target}, {QStringLiteral("to"), to}});
+        lines.append(QStringLiteral("  move %1 -> %2").arg(target, to));
+    }
+
     // 2. The folders and rules files that are missing.
     QJsonArray made;
     if (apply) {
@@ -1670,7 +1712,8 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
             left.append(name);
     }
 
-    const bool nothing = moved.isEmpty() && made.isEmpty() && templates.isEmpty() && transcripts.isEmpty();
+    const bool nothing = moved.isEmpty() && made.isEmpty() && templates.isEmpty() && transcripts.isEmpty()
+                         && assets.isEmpty();
     QString message;
     if (nothing)
         message = QStringLiteral("The notes folder already has the layout.");
@@ -1691,6 +1734,7 @@ QJsonObject NotesApi::setupLayout(const QJsonObject &args) {
             {QStringLiteral("moved"), moved},
             {QStringLiteral("made"), made},
             {QStringLiteral("transcripts"), transcripts},
+            {QStringLiteral("assets"), assets},
             {QStringLiteral("templates"), templates},
             {QStringLiteral("skipped"), skipped},
             {QStringLiteral("leftInPlace"), left},
@@ -2032,6 +2076,50 @@ QJsonObject NotesApi::aiStatus(const QJsonObject &args) {
         {QStringLiteral("ready"), speech.isEmpty()},
         {QStringLiteral("problem"), speech}});
     return out;
+}
+
+int NotesApi::rewriteFileLinks(const QString &from, const QString &to) {
+    static const QRegularExpression linkRe(QStringLiteral("\\]\\((<[^>\\n]+>|[^)\\s]+)\\)"));
+    const QString name = QFileInfo(from).fileName();
+    const QString encodedName = QString::fromUtf8(QUrl::toPercentEncoding(name));
+    int total = 0;
+    for (const QVariant &entry : m_index.notes()) {
+        const QString path = entry.toMap().value(QStringLiteral("path")).toString();
+        const QString text = read(path);
+        if (!text.contains(name) && !text.contains(encodedName))
+            continue;
+        const QDir dir = QFileInfo(path).absoluteDir();
+        QString out;
+        qsizetype last = 0;
+        int changed = 0;
+        QRegularExpressionMatchIterator links = linkRe.globalMatch(text);
+        while (links.hasNext()) {
+            const QRegularExpressionMatch link = links.next();
+            QString target = link.captured(1);
+            const bool angled = target.startsWith(QLatin1Char('<'));
+            if (angled)
+                target = target.mid(1, target.size() - 2);
+            if (target.contains(QLatin1String("://")) || target.startsWith(QLatin1Char('#')))
+                continue;
+            const qsizetype hash = target.indexOf(QLatin1Char('#'));
+            const QString fragment = hash >= 0 ? target.mid(hash) : QString();
+            const QString file = QUrl::fromPercentEncoding((hash >= 0 ? target.left(hash) : target).toUtf8());
+            if (QDir::cleanPath(dir.filePath(file)) != QDir::cleanPath(from))
+                continue;
+            const QString moved = dir.relativeFilePath(to);
+            const QString written = angled ? QStringLiteral("<%1%2>").arg(moved, fragment)
+                                           : QString::fromUtf8(QUrl::toPercentEncoding(moved, "/")) + fragment;
+            out += text.mid(last, link.capturedStart(1) - last) + written;
+            last = link.capturedEnd(1);
+            ++changed;
+        }
+        if (changed == 0)
+            continue;
+        write(path, out + text.mid(last));
+        m_index.updateFile(path);
+        total += changed;
+    }
+    return total;
 }
 
 QStringList NotesApi::projectNames() const {
