@@ -460,11 +460,13 @@ const QList<NotesApi::Tool> &NotesApi::tools() {
                         "imports Voxtype's last recorded meeting. With note, an AI (Omarchy's default agent, or "
                         "the one named by ai) then writes a meeting note from it: agenda, notes, decisions and "
                         "action items, with the transcript in a linked note of its own in a transcripts folder beside it."),
-         {{QStringLiteral("file"), QStringLiteral("string"), QStringLiteral("The recording or transcript, or voxtype:latest"), false, true},
+         {{QStringLiteral("file"), QStringLiteral("string"), QStringLiteral("The recording or transcript; voxtype:latest; or a Meeting Recorder meeting: its folder, its transcript.md, or meeting-recorder:latest (the newest)"), false, true},
           {QStringLiteral("note"), QStringLiteral("string"), QStringLiteral("Write a meeting note, with this title (empty: the AI picks one)"), false, false, true},
           {QStringLiteral("ai"), QStringLiteral("string"), QStringLiteral("The AI that writes the note: claude, codex, gemini, opencode, ollama:<model>, anthropic[:<model>], openai:<model>, or none for the transcript alone (default: see omazettel ai)")},
           {QStringLiteral("template"), QStringLiteral("string"), QStringLiteral("Note template for the note (default Meeting)")},
-          {QStringLiteral("folder"), QStringLiteral("string"), QStringLiteral("Folder for the note (default: the template's)")},
+          {QStringLiteral("folder"), QStringLiteral("string"), QStringLiteral("Folder for the note (default: the project's, else the template's)")},
+          {QStringLiteral("project"), QStringLiteral("string"), QStringLiteral("Project the meeting is about: the note goes in 03-projects/<project>. Default: the project the meeting's name starts with (\"acme kickoff\"), else the one the AI finds it is about, else the meetings folder")},
+          {QStringLiteral("again"), QStringLiteral("boolean"), QStringLiteral("Write another note for a Meeting Recorder meeting that has one already")},
           {QStringLiteral("transcript"), QStringLiteral("boolean"), QStringLiteral("Keep the transcript in a separate note, linked from the meeting note (default on)")},
           {QStringLiteral("model"), QStringLiteral("string"), QStringLiteral("whisper.cpp model name or file for recordings (default: Voxtype's model, else the best downloaded)")},
           {QStringLiteral("language"), QStringLiteral("string"), QStringLiteral("Spoken language code for whisper, e.g. en (default: detect)")},
@@ -1245,7 +1247,9 @@ QJsonObject NotesApi::createNote(const QJsonObject &args) {
         path = Vault::uniquePath(folder.isEmpty() ? m_root : folder, name, QStringLiteral("md"));
         write(path, content.trimmed());
     } else {
-        path = makeNote(title, templateName, folder, QDateTime(), &existed, &cursor);
+        // when: the note's date and time, such as a meeting's start (ISO).
+        path = makeNote(title, templateName, folder, QDateTime::fromString(str(args, QStringLiteral("when")), Qt::ISODate),
+                        &existed, &cursor);
         // An explicit folder wins over the template's own.
         if (!existed && !folder.isEmpty() && QFileInfo(path).absolutePath() != folder) {
             const QString moved = Vault::uniquePath(folder, QFileInfo(path).completeBaseName(), QStringLiteral("md"));
@@ -1959,26 +1963,34 @@ QJsonObject NotesApi::transcribe(const QJsonObject &args) {
     static const QStringList textKinds{QStringLiteral("vtt"), QStringLiteral("srt"), QStringLiteral("sbv"), QStringLiteral("txt"),
                                        QStringLiteral("md"), QStringLiteral("markdown"), QStringLiteral("docx"),
                                        QStringLiteral("odt"), QStringLiteral("rtf"), QStringLiteral("html")};
-    if (!fromVoxtype && !textKinds.contains(QFileInfo(file).suffix().toLower())) {
+    if (!fromVoxtype && Transcriber::meetingRecorderFolder(file).isEmpty() && !file.startsWith(QLatin1String("meeting-recorder:"))
+            && !textKinds.contains(QFileInfo(file).suffix().toLower())) {
         progress(QStringLiteral("Transcribing %1 with %2 (%3)…").arg(QFileInfo(file).fileName(),
                  Transcriber::engine().isEmpty() ? QStringLiteral("whisper") : Transcriber::engine(),
                  Transcriber::engineModel(str(args, QStringLiteral("model")))));
     }
-    const Transcriber::Result result = Transcriber::transcribe(fromVoxtype ? file : QFileInfo(file).absoluteFilePath(),
+    const bool named = fromVoxtype || file.startsWith(QLatin1String("meeting-recorder:"));
+    const Transcriber::Result result = Transcriber::transcribe(named ? file : QFileInfo(file).absoluteFilePath(),
                                                                str(args, QStringLiteral("model")),
                                                                str(args, QStringLiteral("language")),
                                                                flag(args, QStringLiteral("timestamps"), false), &error);
     if (!error.isEmpty())
         fail(error);
     if (args.contains(QStringLiteral("note")))
-        return meetingNote(result.text, result.speakers, QFileInfo(file).fileName(), args);
-    QJsonObject out{{QStringLiteral("file"), QFileInfo(file).absoluteFilePath()},
+        return meetingNote(result, result.folder.isEmpty() ? QFileInfo(file).fileName() : QFileInfo(result.folder).fileName(), args);
+    QJsonObject out{{QStringLiteral("file"), result.folder.isEmpty() ? QFileInfo(file).absoluteFilePath() : result.folder},
                     {QStringLiteral("engine"), result.engine},
                     {QStringLiteral("speakers"), toJsonArray(result.speakers)},
                     {QStringLiteral("words"), int(result.text.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts).size())},
                     {QStringLiteral("text"), result.text}};
     if (!result.model.isEmpty())
         out.insert(QStringLiteral("model"), result.model);
+    if (!result.title.isEmpty())
+        out.insert(QStringLiteral("title"), result.title);
+    if (result.started.isValid())
+        out.insert(QStringLiteral("started"), result.started.toString(Qt::ISODate));
+    if (!result.chapters.isEmpty())
+        out.insert(QStringLiteral("chapters"), toJsonArray(result.chapters));
     return out;
 }
 
@@ -2022,12 +2034,60 @@ QJsonObject NotesApi::aiStatus(const QJsonObject &args) {
     return out;
 }
 
-QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &speakers, const QString &source,
-                                  const QJsonObject &args) {
+QStringList NotesApi::projectNames() const {
+    if (!Layout::present(m_root))
+        return {};
+    const QString daily = QFileInfo(Layout::dailyFolder(m_root)).fileName();
+    const QString meetings = QFileInfo(Layout::meetingsFolder(m_root)).fileName();
+    QStringList names;
+    for (const QString &name : QDir(QDir(m_root).filePath(QLatin1String(Layout::projectsFolder)))
+                                   .entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase)) {
+        if (!name.startsWith(QLatin1Char('.')) && name.compare(daily, Qt::CaseInsensitive) != 0
+                && name.compare(meetings, Qt::CaseInsensitive) != 0)
+            names.append(name);
+    }
+    return names;
+}
+
+QJsonObject NotesApi::meetingNote(const Transcriber::Result &heard, const QString &source, const QJsonObject &args) {
+    const QString &transcript = heard.text;
     if (transcript.trimmed().isEmpty())
         fail(QStringLiteral("%1 has no words in it to make a note from.").arg(source));
+
+    // A Meeting Recorder meeting gets one note: running it again (an
+    // automatic action after "Transcribe again") finds the one there is.
+    if (!heard.folder.isEmpty() && !flag(args, QStringLiteral("again"), false)) {
+        for (const QVariant &entry : m_index.notes()) {
+            const QString path = entry.toMap().value(QStringLiteral("path")).toString();
+            if (readMeta(read(path)).value(QStringLiteral("recording")).toString() == heard.folder) {
+                const QString made = relative(path);
+                return {{QStringLiteral("path"), made},
+                        {QStringLiteral("existing"), true},
+                        {QStringLiteral("source"), source},
+                        {QStringLiteral("message"), QStringLiteral("Created %1 earlier (--again writes another)").arg(made)}};
+            }
+        }
+    }
+
     const QString templateName = str(args, QStringLiteral("template"), QStringLiteral("Meeting"));
-    const QString title = str(args, QStringLiteral("note")).trimmed();
+    // Meeting Recorder calls a meeting nobody named "Meeting 14:30".
+    static const QRegularExpression unnamedMeeting(QStringLiteral("^Meeting \\d{1,2}:\\d{2}$"));
+    QString title = str(args, QStringLiteral("note")).trimmed();
+    if (title.isEmpty() && !heard.title.isEmpty() && !unnamedMeeting.match(heard.title).hasMatch())
+        title = heard.title.trimmed();
+
+    // Which project: named, else the one the meeting's name starts with
+    // ("uci demo planning"), else (below) the one the AI finds.
+    const QStringList projects = str(args, QStringLiteral("folder")).isEmpty() ? projectNames() : QStringList();
+    QString project = str(args, QStringLiteral("project")).trimmed();
+    if (project.isEmpty()) {
+        for (const QString &name : projects) {
+            static const QRegularExpression afterName(QStringLiteral("^[\\s:\\-–—_/]"));
+            if (title.startsWith(name, Qt::CaseInsensitive)
+                    && (title.size() == name.size() || afterName.match(title.mid(name.size())).hasMatch()))
+                project = name;
+        }
+    }
     const bool keepTranscript = flag(args, QStringLiteral("transcript"), true);
     const QString ai = str(args, QStringLiteral("ai"));
 
@@ -2046,9 +2106,13 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
                        {QStringLiteral("linkNotes"), false}};
     if (!str(args, QStringLiteral("folder")).isEmpty())
         create.insert(QStringLiteral("folder"), str(args, QStringLiteral("folder")));
+    if (heard.started.isValid())
+        create.insert(QStringLiteral("when"), heard.started.toString(Qt::ISODate));
     QJsonObject sections;
     QJsonObject meta;
-    QStringList attendees = speakers;
+    if (!heard.folder.isEmpty())
+        meta.insert(QStringLiteral("recording"), heard.folder);
+    QStringList attendees = heard.speakers;
     QString writer;
 
     if (ai != QLatin1String("none")) {
@@ -2087,17 +2151,25 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
             "  \"summary\": one or two sentences on what the meeting covered and concluded,\n"
             "  \"attendees\": [names of the people who took part],\n"
             "  \"tags\": [up to 5 short lowercase topic tags, no #],\n"
+            "%5"
             "  \"sections\": {\n%1\n  }\n"
             "}\n\n"
             "Rules: use only what the transcript says; never invent names, owners, dates or decisions. "
-            "Speaker labels like \"Speaker 1\" are not names. Write in the language of the transcript. "
-            "%2\n\n"
+            "Speaker labels like \"Speaker 1\", \"You\" or \"Remote 2\" are not names. Write in the language of the transcript. "
+            "%2%6\n\n"
             "Transcript (from %3):\n<<<\n%4\n>>>\n")
             .arg(guide.join(QStringLiteral(",\n")),
                  names.isEmpty() ? QString()
                                  : QStringLiteral("When the meeting clearly discusses one of these existing notes, link it as [[Name]] "
                                                   "(exactly as written here, only these): %1.").arg(names.join(QStringLiteral(", "))),
-                 source, transcript.trimmed());
+                 source, transcript.trimmed(),
+                 project.isEmpty() && !projects.isEmpty()
+                     ? QStringLiteral("  \"project\": the project the meeting is about, exactly one of: %1; or \"\" when it is not clearly one of them,\n")
+                           .arg(projects.join(QStringLiteral(", ")))
+                     : QString(),
+                 heard.chapters.isEmpty() ? QString()
+                                          : QStringLiteral(" The recorder divided the meeting into these chapters; follow them for the agenda: %1.")
+                                                .arg(heard.chapters.join(QStringLiteral("; "))));
         progress(QStringLiteral("Writing the meeting note with %1…").arg(writer));
         QString error;
         const QString answer = Assistant::complete(choice, prompt, &error);
@@ -2117,9 +2189,13 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
         }
         if (title.isEmpty())
             create.insert(QStringLiteral("title"), note.value(QStringLiteral("title")).toString(QStringLiteral("Meeting")));
+        // The names the recorder was given are certain; the AI's are a guess.
         const QStringList named = stringList(note.value(QStringLiteral("attendees")));
-        if (!named.isEmpty())
+        if (attendees.isEmpty() && !named.isEmpty())
             attendees = named;
+        const QString found = note.value(QStringLiteral("project")).toString().trimmed();
+        if (project.isEmpty() && projects.contains(found))
+            project = found;
         const QStringList tags = stringList(note.value(QStringLiteral("tags")));
         if (!tags.isEmpty())
             create.insert(QStringLiteral("tags"), toJsonArray(tags));
@@ -2132,6 +2208,8 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
         create.insert(QStringLiteral("title"), QFileInfo(source).completeBaseName());
     if (!attendees.isEmpty())
         meta.insert(QStringLiteral("attendees"), toJsonArray(attendees));
+    if (!project.isEmpty() && !create.contains(QStringLiteral("folder")))
+        create.insert(QStringLiteral("folder"), QStringLiteral("%1/%2").arg(QLatin1String(Layout::projectsFolder), project));
     create.insert(QStringLiteral("sections"), sections);
     create.insert(QStringLiteral("meta"), meta);
 
@@ -2145,6 +2223,27 @@ QJsonObject NotesApi::meetingNote(const QString &transcript, const QStringList &
             text.replace(attendeesRe, QStringLiteral("\\1 ") + attendees.join(QStringLiteral(", ")));
             write(path, text);
         }
+    }
+    // Where the recording is, under the template's When and Attendees lines.
+    if (!heard.folder.isEmpty()) {
+        const QString path = QDir(m_root).filePath(result.value(QStringLiteral("path")).toString());
+        QString text = read(path);
+        const QString line = QStringLiteral("**Recording:** [%1](%2)")
+                                 .arg(QFileInfo(heard.folder).fileName(), QUrl::fromLocalFile(heard.folder).toString(QUrl::FullyEncoded));
+        static const QRegularExpression lastFact(QStringLiteral("(?m)^\\*\\*(Attendees|When):\\*\\*.*$"));
+        QRegularExpressionMatchIterator facts = lastFact.globalMatch(text);
+        qsizetype at = -1;
+        while (facts.hasNext())
+            at = facts.next().capturedEnd();
+        if (at >= 0) {
+            // Markdown breaks the line with two spaces at the end.
+            if (!text.left(at).endsWith(QLatin1String("  ")))
+                text.insert(at, QStringLiteral("  ")), at += 2;
+            text.insert(at, QLatin1Char('\n') + line);
+        } else {
+            text = appendText(text, line);
+        }
+        write(path, text);
     }
     const QString path = QDir(m_root).filePath(result.value(QStringLiteral("path")).toString());
     // The transcript goes in a note of its own, in a transcripts folder

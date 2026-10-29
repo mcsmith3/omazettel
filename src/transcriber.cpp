@@ -3,6 +3,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -102,6 +105,67 @@ QString voxtypeText(const QByteArray &output) {
     return kept.join(QLatin1Char('\n')).trimmed();
 }
 
+// Meeting Recorder, which records meetings and tells their voices apart.
+QString meetingRecorder() {
+    return QStandardPaths::findExecutable(QStringLiteral("omarchy-meeting-recorder"));
+}
+
+// The model Meeting Recorder transcribes with (its config.toml), for messages.
+QString meetingRecorderModel() {
+    QString base = qEnvironmentVariable("XDG_CONFIG_HOME");
+    if (base.isEmpty())
+        base = QDir::homePath() + QStringLiteral("/.config");
+    QFile file(base + QStringLiteral("/omarchy-meeting-recorder/config.toml"));
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        static const QRegularExpression modelRe(QStringLiteral("(?m)^\\s*model\\s*=\\s*\"([^\"]+)\""));
+        const QRegularExpressionMatch match = modelRe.match(QString::fromUtf8(file.readAll()));
+        if (match.hasMatch())
+            return match.captured(1);
+    }
+    return QStringLiteral("large-v3-turbo");
+}
+
+QString manifestIn(const QString &folder) {
+    const QStringList found = QDir(folder).entryList({QStringLiteral("*.meeting-recorder")}, QDir::Files, QDir::Name);
+    return found.isEmpty() ? QString() : QDir(folder).filePath(found.first());
+}
+
+// 61000 -> "01:01", 3723000 -> "1:02:03", as Meeting Recorder writes times.
+QString clock(qint64 ms) {
+    const qint64 s = ms / 1000;
+    return s >= 3600 ? QStringLiteral("%1:%2:%3").arg(s / 3600).arg(s / 60 % 60, 2, 10, QLatin1Char('0')).arg(s % 60, 2, 10, QLatin1Char('0'))
+                     : QStringLiteral("%1:%2").arg(s / 60, 2, 10, QLatin1Char('0')).arg(s % 60, 2, 10, QLatin1Char('0'));
+}
+
+// A meeting folder of Meeting Recorder's, with its transcript and details.
+Transcriber::Result readMeeting(const QString &folder, bool timestamps, QString *error) {
+    Transcriber::Result result;
+    QJsonObject manifest;
+    const QString manifestPath = manifestIn(folder);
+    if (!manifestPath.isEmpty())
+        manifest = QJsonDocument::fromJson(readAll(manifestPath).toUtf8()).object();
+    result.title = manifest.value(QStringLiteral("title")).toString(QFileInfo(manifestPath).completeBaseName());
+    const QString transcript = QDir(folder).filePath(QStringLiteral("transcript.md"));
+    if (!QFileInfo(transcript).isFile()) {
+        *error = QStringLiteral("Meeting Recorder has not finished the transcript of \"%1\" yet (%2).")
+                     .arg(result.title, folder);
+        return result;
+    }
+    result.text = Transcriber::fromMeetingRecorder(readAll(transcript), timestamps, &result.speakers);
+    result.engine = QStringLiteral("meeting recorder");
+    result.model = manifest.value(QStringLiteral("model")).toString();
+    result.folder = folder;
+    if (manifest.contains(QStringLiteral("started_at")))
+        result.started = QDateTime::fromSecsSinceEpoch(manifest.value(QStringLiteral("started_at")).toInteger());
+    result.durationSecs = manifest.value(QStringLiteral("duration_secs")).toInt();
+    for (const QJsonValue &chapter : manifest.value(QStringLiteral("chapters")).toArray()) {
+        const QJsonObject item = chapter.toObject();
+        result.chapters.append(QStringLiteral("[%1] %2").arg(clock(item.value(QStringLiteral("start_ms")).toInteger()),
+                                                              item.value(QStringLiteral("title")).toString()));
+    }
+    return result;
+}
+
 QString whisperCpp() {
     for (const QString &name : {QStringLiteral("whisper-cli"), QStringLiteral("whisper-cpp")}) {
         const QString found = QStandardPaths::findExecutable(name);
@@ -122,6 +186,67 @@ QStringList modelFolders() {
             QStringLiteral("/usr/local/share/whisper.cpp/models")};
 }
 
+}
+
+bool Transcriber::unnamedSpeaker(const QString &name) {
+    static const QRegularExpression defaultRe(QStringLiteral("^(You|Remote|Room|Speaker)( \\d+)?$"));
+    return name.trimmed().isEmpty() || defaultRe.match(name.trimmed()).hasMatch();
+}
+
+QString Transcriber::meetingsFolder() {
+    const QString chosen = qEnvironmentVariable("OMAZETTEL_MEETINGS");
+    return chosen.isEmpty() ? QDir::homePath() + QStringLiteral("/Documents/Meetings") : chosen;
+}
+
+QString Transcriber::meetingRecorderFolder(const QString &file) {
+    if (file.startsWith(QLatin1String("meeting-recorder:"))) {
+        // Folders are named "<YYYYMMDDHHMM> <name>": newest first.
+        const QString wanted = file.mid(17).trimmed();
+        const QDir meetings(meetingsFolder());
+        for (const QString &name : meetings.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed)) {
+            const QString folder = meetings.filePath(name);
+            if (manifestIn(folder).isEmpty() || !QFileInfo(QDir(folder).filePath(QStringLiteral("transcript.md"))).isFile())
+                continue;
+            if (wanted.isEmpty() || wanted == QLatin1String("latest") || name.contains(wanted, Qt::CaseInsensitive))
+                return QFileInfo(folder).canonicalFilePath();
+        }
+        return QString();
+    }
+    const QFileInfo info(file);
+    if (info.isDir())
+        return manifestIn(info.absoluteFilePath()).isEmpty() ? QString() : info.canonicalFilePath();
+    if (info.isFile() && (info.suffix() == QLatin1String("meeting-recorder") || !manifestIn(info.absolutePath()).isEmpty()))
+        return QFileInfo(info.absolutePath()).canonicalFilePath();
+    return QString();
+}
+
+QString Transcriber::fromMeetingRecorder(const QString &markdown, bool timestamps, QStringList *speakers) {
+    // The turns follow "## Transcript" (after the heading and the chapters).
+    QString body = markdown;
+    const qsizetype start = body.indexOf(QLatin1String("## Transcript"));
+    if (start >= 0)
+        body = body.mid(start + 13);
+    static const QRegularExpression turnRe(QStringLiteral("^\\*\\*\\[([0-9:]+)\\]\\s+(.+?):\\*\\*\\s*(.*)$"));
+    QStringList turns;
+    QStringList named;
+    for (const QString &raw : body.split(QLatin1Char('\n'))) {
+        const QString line = raw.trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+            continue;
+        const QRegularExpressionMatch turn = turnRe.match(line);
+        if (turn.hasMatch()) {
+            const QString speaker = turn.captured(2).trimmed();
+            if (!unnamedSpeaker(speaker) && !named.contains(speaker))
+                named.append(speaker);
+            turns.append((timestamps ? QStringLiteral("[%1] ").arg(turn.captured(1)) : QString())
+                         + speaker + QStringLiteral(": ") + turn.captured(3).trimmed());
+        } else if (!turns.isEmpty()) {
+            turns.last() += QLatin1Char(' ') + line;
+        }
+    }
+    if (speakers)
+        *speakers = named;
+    return turns.join(QStringLiteral("\n\n"));
 }
 
 QString Transcriber::fromCaptions(const QString &captions, bool timestamps, QStringList *speakers) {
@@ -230,6 +355,8 @@ QString Transcriber::fromCaptions(const QString &captions, bool timestamps, QStr
 }
 
 QString Transcriber::engine() {
+    if (!meetingRecorder().isEmpty())
+        return QStringLiteral("meeting recorder");
     if (!voxtype().isEmpty())
         return QStringLiteral("voxtype");
     if (!whisperCpp().isEmpty())
@@ -240,6 +367,8 @@ QString Transcriber::engine() {
 }
 
 QString Transcriber::engineModel(const QString &model) {
+    if (model.isEmpty() && !meetingRecorder().isEmpty())
+        return meetingRecorderModel();
     if (model.isEmpty() && !voxtype().isEmpty())
         return voxtypeModel();
     if (!whisperCpp().isEmpty()) {
@@ -253,6 +382,9 @@ QString Transcriber::engineModel(const QString &model) {
 
 QString Transcriber::problem(const QString &model) {
     const bool omarchy = QFileInfo::exists(QStringLiteral("/usr/share/omarchy"));
+    // Meeting Recorder brings its own model (downloaded on first use).
+    if (model.isEmpty() && !meetingRecorder().isEmpty())
+        return QString();
     if (QStandardPaths::findExecutable(QStringLiteral("ffmpeg")).isEmpty())
         return QStringLiteral("Transcribing a recording needs ffmpeg: sudo pacman -S ffmpeg");
     if (model.isEmpty() && !voxtype().isEmpty())
@@ -349,6 +481,13 @@ bool Transcriber::downloadModel(const QString &name, QString *path, QString *err
 Transcriber::Result Transcriber::transcribe(const QString &file, const QString &model,
                                             const QString &language, bool timestamps, QString *error) {
     Result result;
+    const QString meeting = meetingRecorderFolder(file);
+    if (!meeting.isEmpty())
+        return readMeeting(meeting, timestamps, error);
+    if (file.startsWith(QLatin1String("meeting-recorder:"))) {
+        *error = QStringLiteral("There is no meeting with a transcript in %1 yet.").arg(meetingsFolder());
+        return result;
+    }
     if (file.startsWith(QLatin1String("voxtype:"))) {
         const QString id = file.mid(8).isEmpty() ? QStringLiteral("latest") : file.mid(8);
         const QString program = QStandardPaths::findExecutable(QStringLiteral("voxtype"));
@@ -412,6 +551,22 @@ Transcriber::Result Transcriber::transcribe(const QString &file, const QString &
     const QString needed = problem(model);
     if (!needed.isEmpty()) {
         *error = needed;
+        return result;
+    }
+    // Meeting Recorder tells the voices apart ("Speaker 1", "Speaker 2").
+    if (const QString recorder = meetingRecorder(); model.isEmpty() && !recorder.isEmpty()) {
+        QStringList arguments{QStringLiteral("transcribe-file"), info.absoluteFilePath()};
+        if (!language.isEmpty())
+            arguments << QStringLiteral("--language") << language;
+        QString errors;
+        QByteArray output;
+        if (run(recorder, arguments, &errors, &output) != 0) {
+            *error = QStringLiteral("Meeting Recorder could not transcribe %1: %2").arg(info.fileName(), lastLines(errors));
+            return result;
+        }
+        result.text = fromMeetingRecorder(QString::fromUtf8(output), timestamps, &result.speakers);
+        result.engine = QStringLiteral("meeting recorder");
+        result.model = meetingRecorderModel();
         return result;
     }
     const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));

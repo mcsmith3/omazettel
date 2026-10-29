@@ -121,7 +121,7 @@ sudo pacman -S --needed base-devel git qt6-base qt6-declarative poppler-qt6 xdg-
 | Creating a private GitHub repository to sync with | `github-cli` | Then run `gh auth login` and `gh auth setup-git` once |
 | Editing Word or OpenDocument export styles | `libreoffice-fresh` | Opens reference documents |
 | Citations | none | Use a `.bib` or CSL JSON file, for example from Zotero with Better BibTeX |
-| Transcribing meeting recordings | `ffmpeg`, and Voxtype (Omarchy's dictation: `omarchy voxtype install`) or `whisper.cpp` (AUR) | With whisper.cpp, download a model once: `omazettel transcribe --download-model base.en`. Caption files (.vtt, .srt) and text transcripts need neither |
+| Transcribing meeting recordings | [Meeting Recorder](https://github.com/jankeesvw/omarchy-meeting-recorder) (`yay -S omarchy-meeting-recorder`), which also tells the speakers apart; or `ffmpeg` with Voxtype (Omarchy's dictation: `omarchy voxtype install`) or `whisper.cpp` (AUR) | With whisper.cpp, download a model once: `omazettel transcribe --download-model base.en`. Caption files (.vtt, .srt) and text transcripts need neither |
 | Meeting notes written by AI | An AI you already have: a coding agent (Claude Code, Codex, Gemini CLI, OpenCode, ...), Ollama, or an API key | On Omarchy, your default agent (`omarchy default agent`) is used. `omazettel ai` shows what is set up |
 
 ```sh
@@ -581,6 +581,7 @@ skips it).
 omazettel transcribe standup.vtt --note                    # the AI picks the title
 omazettel transcribe ~/Recordings/standup.m4a --note "Atlas standup"
 omazettel transcribe voxtype:latest --note                 # Voxtype's last recorded meeting
+omazettel transcribe meeting-recorder:latest --note        # Meeting Recorder's newest meeting
 ```
 
 OmaZettel reads the captions or transcript (Teams, Zoom and Meet `.vtt`/`.srt`,
@@ -593,9 +594,37 @@ beside it (`<meeting>-transcript`), and the two link to each other.
 the transcript note, and `-t` and `-f` choose another template or folder.
 Without `--note`, `transcribe` prints the transcript.
 
-*Transcribing recordings* uses Voxtype, Omarchy's dictation, with the model you
-set up for it (`omarchy voxtype install`, `omarchy voxtype model`), and
-otherwise [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+With the [folder layout](#folder-layout), the note goes in its project's
+folder: the one named with `--project`, else the project the meeting's name
+starts with ("uci demo planning" goes in `03-projects/uci/`), else the one the
+AI finds the meeting is about, else `03-projects/meetings/`.
+
+**Meeting Recorder.** [Meeting Recorder](https://github.com/jankeesvw/omarchy-meeting-recorder)
+records any call (your microphone and what the computer plays) without a bot
+joining, and tells the speakers apart. OmaZettel reads its meetings directly:
+give `transcribe` a meeting's folder, its `transcript.md`, or
+`meeting-recorder:latest`, and the note gets the meeting's own name, date and
+start time, the speakers you named as attendees, its chapters as a guide for
+the agenda, and a link to the recording. A meeting gets one note; running it
+again finds that note (`--again` writes another). To have every meeting
+become a note as soon as its transcript is done, add an action to
+`~/.config/omarchy-meeting-recorder/config.toml`:
+
+```toml
+[[action]]
+name = "Meeting note in OmaZettel"
+command = 'omazettel transcribe "$MEETING_DIR" --note --plain | grep "^Created"'
+auto = true
+```
+
+Name meetings after their project ("uci demo planning") and rename the
+speakers on Meeting Recorder's done page before the note is written, or run
+the action again from its Actions menu afterwards with `--again`.
+
+*Transcribing recordings* uses Meeting Recorder when it is installed, which
+labels the speakers ("Speaker 1", "Speaker 2"); then Voxtype, Omarchy's
+dictation, with the model you set up for it (`omarchy voxtype install`,
+`omarchy voxtype model`); and otherwise [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 (`yay -S whisper.cpp`, then `omazettel transcribe --download-model base.en`).
 Nothing is uploaded.
 
