@@ -54,7 +54,7 @@ private:
 };
 }
 
-#define OMAZETTEL_VERSION "0.11.1"
+#define OMAZETTEL_VERSION "0.12.0"
 
 int main(int argc, char *argv[]) {
     // Answered before the application exists, so they need no display.

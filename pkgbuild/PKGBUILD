@@ -6,7 +6,7 @@
 # and build in "$srcdir/omazettel".
 
 pkgname=omazettel
-pkgver=0.11.1
+pkgver=0.12.0
 pkgrel=1
 pkgdesc='Zettelkasten notes in plain Markdown files: links, backlinks, tags, templates, pandoc export and git sync'
 arch=('x86_64' 'aarch64')
