@@ -38,13 +38,13 @@ jobs:
         run: |
           sed -i 's/^#DisableSandbox/DisableSandbox/' /etc/pacman.conf
           pacman -Syu --noconfirm --needed base-devel git qt6-base qt6-declarative poppler-qt6 ttf-jetbrains-mono
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build, test and package
         env:
           REF: ${{ github.event_name == 'pull_request' && 'pr' || github.ref_name }}
           ARCH: ${{ matrix.arch }}
         run: bash bin/release-build "$REF" "$ARCH"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.arch }}
           path: dist/*
@@ -59,8 +59,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: dist
