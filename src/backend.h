@@ -70,6 +70,11 @@ public:
     void setEditorFont(const QString &family);
     QStringList availableFonts() const;
     static QString defaultEditorFont();
+    // Shortcut text as written in the code ("Ctrl+Shift+H", "Ctrl+Click /
+    // Ctrl+Enter") for the platform: on macOS Ctrl is Command, so it reads
+    // "⇧⌘H". keys() does this on macOS only; macKeys() always, for tests.
+    Q_INVOKABLE QString keys(const QString &text) const;
+    static QString macKeys(const QString &text);
     static QStringList selectableFontFamilies(const QStringList &families);
     static int countWords(const QString &text);
     static QString normalizedLinkUrl(const QString &clipboardText);

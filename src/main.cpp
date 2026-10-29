@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QWindow>
 #include <QElapsedTimer>
+#include <QFileOpenEvent>
 #include <QFile>
 #include <QSettings>
 #include <QFileInfo>
@@ -30,6 +31,28 @@
 #include "singleinstance.h"
 #include "sync.h"
 #include "vault.h"
+
+namespace {
+// macOS hands over files opened from Finder (double-click, Open With,
+// dropping on the Dock icon) as events, not arguments.
+class FileOpenFilter : public QObject {
+public:
+    FileOpenFilter(QObject *window, QObject *parent) : QObject(parent), m_window(window) {}
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() != QEvent::FileOpen)
+            return QObject::eventFilter(watched, event);
+        const QString file = static_cast<QFileOpenEvent *>(event)->file();
+        if (!file.isEmpty())
+            QMetaObject::invokeMethod(m_window, "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(file)));
+        return true;
+    }
+
+private:
+    QObject *m_window;
+};
+}
 
 #define OMAZETTEL_VERSION "0.11.1"
 
@@ -214,6 +237,8 @@ int main(int argc, char *argv[]) {
         if (!files.isEmpty())
             QMetaObject::invokeMethod(window, "openFromLaunch", Q_ARG(QVariant, QUrl::fromLocalFile(files.first())));
     });
+
+    app.installEventFilter(new FileOpenFilter(window, &app));
 
     // A PDF shows in the PDF view, with the last note open behind it.
     const bool launchPdf = !launchFiles.isEmpty() && launchFiles.first().endsWith(QLatin1String(".pdf"), Qt::CaseInsensitive);

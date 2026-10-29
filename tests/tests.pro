@@ -1,5 +1,7 @@
 QT += core gui concurrent quick testlib
 CONFIG += testcase c++17 exceptions link_pkgconfig
+# A plain program on macOS too, not an app bundle, so ./tst_* runs it.
+macx: CONFIG -= app_bundle
 PKGCONFIG += poppler-qt6
 # The tests read PDFs directly rather than through the add-on library.
 DEFINES += OMAZETTEL_PDF_BUILT_IN

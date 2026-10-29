@@ -182,6 +182,18 @@ Dialog {
                       + "what changed and go back. Add a remote (such as a private GitHub repository) to "
                       + "sync between devices and people."
             }
+            Small {
+                objectName: "outerRepositoryNote"
+                visible: sync.gitAvailable && !sync.isRepo && sync.outerRepository.length > 0
+                text: sync.outerRepository + " is a git repository of its own, around your whole home folder. "
+                      + "Version history leaves it alone: turning it on starts one just for this notes folder."
+            }
+            Small {
+                visible: sync.gitAvailable && (!sync.isRepo || sync.remoteUrl.length === 0)
+                text: "Already syncing these notes from another computer? Don't start a second history here: "
+                      + "clone that repository instead (git clone https://github.com/you/notes.git ~/Notes) "
+                      + "and choose that folder in OmaZettel."
+            }
             Action {
                 objectName: "enableHistory"
                 visible: sync.gitAvailable && !sync.isRepo

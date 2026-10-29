@@ -161,6 +161,41 @@ cd omazettel
 ./bin/install
 ```
 
+### macOS (early)
+
+OmaZettel builds on macOS from source, with Qt and Poppler from
+[Homebrew](https://brew.sh). It's new there, so tell us what doesn't work.
+
+```sh
+brew install qtbase qtdeclarative qtsvg poppler-qt6 pkgconf pandoc
+git clone https://github.com/mcsmith3/omazettel.git
+cd omazettel
+./bin/install
+```
+
+If your notes already sync from another computer, clone them rather than
+starting a new notes folder (see [Sync and history](#sync-and-history)), and
+keep them outside iCloud Drive: with "Desktop & Documents Folders" turned on in
+iCloud, `~/Documents` is in iCloud, which doesn't mix well with git.
+
+```sh
+git clone https://github.com/you/notes.git ~/Notes
+```
+
+Then open OmaZettel from Applications or Spotlight. Finder can open Markdown
+notes and PDFs with it. For the `omazettel` command in a terminal:
+
+```sh
+ln -sf /Applications/OmaZettel.app/Contents/MacOS/OmaZettel "$(brew --prefix)/bin/omazettel"
+```
+
+`./bin/install` builds `OmaZettel.app` and puts it in Applications.
+**Update:** in the `omazettel` folder, run `git pull` and `./bin/install` again.
+Shortcuts use ⌘ where Linux uses Ctrl; Find and replace is ⌥⌘F, since ⌘H hides
+the app. Transcribing recordings isn't set up for macOS yet. Optionally,
+`brew install --cask font-jetbrains-mono` for the font OmaZettel uses on
+Omarchy (otherwise it uses Menlo).
+
 ## Getting started
 
 1. Open **OmaZettel** from the app launcher.
@@ -427,7 +462,17 @@ format the citations and add a reference list. A note may also name its own
 
 Your notes stay plain files on your computer. To keep them on other devices, or
 share them with a few people taking turns, OmaZettel has git built in (… →
-**Sync & history…**, or click the status line at the foot of the sidebar):
+**Sync & history…**, or click the status line at the foot of the sidebar).
+
+**Notes already synced from another computer?** Don't set them up again on the
+new one: clone the repository and choose that folder in OmaZettel. It then has
+the remote and the whole history already, and syncs straight away.
+
+```sh
+git clone https://github.com/you/notes.git ~/Notes        # or your GitLab, Forgejo, Gitea… address
+```
+
+To start syncing for the first time:
 
 1. **Turn on version history.** Every version of every note is kept with git.
 2. **Add a remote** on any git server: GitHub, GitLab, Codeberg, Forgejo,
@@ -482,11 +527,9 @@ Sync & history, and resolved the same way.
 OmaZettel does not edit a note live alongside someone else. People take turns
 and sync, and the conflict screen handles the occasional clash.
 
-On another computer, clone the repository and choose that folder in OmaZettel:
-
-```sh
-git clone https://github.com/you/notes.git ~/Notes        # or your GitLab, Forgejo, Gitea… address
-```
+If your whole home folder is a git repository (some people keep settings files
+that way), version history leaves it alone and starts one just for the notes
+folder, so a sync never sends anything else from your home folder.
 
 ## Command line and AI assistants
 
@@ -697,7 +740,9 @@ folder at the last note. `omazettel --help` lists the commands (see
 You need the [requirements](#requirements) above: Qt 6.8 or newer
 (`qt6-base`, `qt6-declarative`), `poppler-qt6`, a C++17 compiler and `make`.
 `bin/build` also builds `libomazettel-pdf.so`, the PDF view's reader, which
-OmaZettel loads only when it shows a PDF.
+OmaZettel loads only when it shows a PDF. On macOS it builds
+`build/OmaZettel.app` instead, with the reader inside it (see
+[macOS](#macos-early)).
 
 ```sh
 ./bin/build            # builds ./build/omazettel

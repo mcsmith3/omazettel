@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# Builds OmaZettel into build/: build/omazettel on Linux, build/OmaZettel.app
+# on macOS (with Qt, poppler-qt6 and pkgconf from Homebrew).
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -13,22 +15,59 @@ else
   exit 1
 fi
 
-JOBS="$(nproc 2>/dev/null || echo 1)"
+MACOS=
+QMAKE_ARGS=
+if [ "$(uname -s)" = Darwin ]; then
+  MACOS=1
+  # Homebrew keeps poppler-qt6 out of the usual places (it would clash with
+  # poppler), so tell pkg-config where it is.
+  if command -v brew >/dev/null 2>&1 && POPPLER="$(brew --prefix poppler-qt6 2>/dev/null)" && [ -d "$POPPLER/lib/pkgconfig" ]; then
+    PKG_CONFIG_PATH="$POPPLER/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PKG_CONFIG_PATH
+  fi
+  # Built for this Mac, against Homebrew's Qt, which needs this macOS anyway.
+  QMAKE_ARGS="QMAKE_MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d. -f1-2)"
+fi
+
+JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-"$QMAKE" "$ROOT/omazettel.pro"
+"$QMAKE" "$ROOT/omazettel.pro" $QMAKE_ARGS
 make -j"$JOBS"
 
 # The PDF view's reader, a separate library so OmaZettel runs without
 # poppler-qt6 (it then says what to install).
+PDF_LIBRARY=
 if pkg-config --exists poppler-qt6 2>/dev/null; then
   mkdir -p "$BUILD_DIR/pdf"
-  (cd "$BUILD_DIR/pdf" && "$QMAKE" "$ROOT/pdf/pdf.pro" && make -j"$JOBS")
-  echo "Built $BUILD_DIR/libomazettel-pdf.so"
+  (cd "$BUILD_DIR/pdf" && "$QMAKE" "$ROOT/pdf/pdf.pro" $QMAKE_ARGS && make -j"$JOBS")
+  if [ -n "$MACOS" ]; then PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.dylib"; else PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.so"; fi
+  echo "Built $PDF_LIBRARY"
+elif [ -n "$MACOS" ]; then
+  echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (brew install poppler-qt6 pkgconf)." >&2
 else
   echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (sudo pacman -S poppler-qt6)." >&2
 fi
 
-echo "Built $BUILD_DIR/omazettel"
+if [ -z "$MACOS" ]; then
+  echo "Built $BUILD_DIR/omazettel"
+  exit 0
+fi
+
+# macOS: put the PDF reader and the version in the app bundle, then sign it
+# for this Mac ("-" is an ad hoc signature: no Apple account needed, and Apple
+# Silicon won't run unsigned code).
+APP="$BUILD_DIR/OmaZettel.app"
+VERSION="$(sed -n 's/^#define OMAZETTEL_VERSION "\(.*\)"/\1/p' "$ROOT/src/main.cpp")"
+plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+if [ -n "$PDF_LIBRARY" ]; then
+  mkdir -p "$APP/Contents/PlugIns"
+  cp "$PDF_LIBRARY" "$APP/Contents/PlugIns/"
+fi
+codesign --force --deep --sign - "$APP"
+echo "Built $APP"
+echo "Move it to /Applications to keep it. For the omazettel command in a terminal:"
+echo "  ln -sf /Applications/OmaZettel.app/Contents/MacOS/OmaZettel \"\$(brew --prefix)/bin/omazettel\""

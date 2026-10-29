@@ -742,10 +742,57 @@ void Backend::saveWindowGeometry(int x, int y, int width, int height, bool maxim
     settings.setValue(QStringLiteral("window/maximized"), maximized);
 }
 
+QString Backend::keys(const QString &text) const {
+#ifdef Q_OS_MACOS
+    return macKeys(text);
+#else
+    return text;
+#endif
+}
+
+QString Backend::macKeys(const QString &text) {
+    // In Qt on macOS, Ctrl is Command, Meta is Control and Alt is Option.
+    // Symbols go in the order macOS menus use: ⌃⌥⇧⌘, then the key.
+    static const QList<std::pair<QString, QString>> modifiers = {
+        {QStringLiteral("Super"), QStringLiteral("⌃")}, {QStringLiteral("Meta"), QStringLiteral("⌃")},
+        {QStringLiteral("Alt"), QStringLiteral("⌥")}, {QStringLiteral("Shift"), QStringLiteral("⇧")},
+        {QStringLiteral("Ctrl"), QStringLiteral("⌘")}};
+    static const QRegularExpression combination(
+        QStringLiteral("\\b((?:(?:Ctrl|Shift|Alt|Meta|Super)\\+)+)(\\S)"));
+    QString result;
+    qsizetype from = 0;
+    QRegularExpressionMatchIterator matches = combination.globalMatch(text);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        result += text.mid(from, match.capturedStart() - from);
+        const QStringList held = match.captured(1).split(QLatin1Char('+'), Qt::SkipEmptyParts);
+        QString symbols;
+        for (const auto &[name, symbol] : modifiers) {
+            if (held.contains(name) && !symbols.contains(symbol))
+                symbols += symbol;
+        }
+        // A key name keeps its word ("⌘Click", "⌘Enter"); "+" after the
+        // symbols would read as part of the key.
+        result += symbols + match.captured(2);
+        from = match.capturedEnd();
+    }
+    return result + text.mid(from);
+}
+
 // OmaZettel: the desktop's monospace font (on Omarchy, the one
 // `omarchy font set` chose), else JetBrains Mono, else Qt's fixed font.
+// On macOS, JetBrains Mono, else Menlo.
 QString Backend::defaultEditorFont() {
     static const QString family = [] {
+#ifdef Q_OS_MACOS
+        // macOS has no "monospace" font setting: JetBrains Mono when it is
+        // installed, else Menlo, the Mac's own.
+        for (const QString &candidate : {QStringLiteral("JetBrainsMono Nerd Font"), QStringLiteral("JetBrains Mono"),
+                                         QStringLiteral("Menlo")}) {
+            if (QFontDatabase::hasFamily(candidate))
+                return candidate;
+        }
+#endif
         QFont monospace(QStringLiteral("monospace"));
         monospace.setStyleHint(QFont::Monospace);
         const QString resolved = QFontInfo(monospace).family();

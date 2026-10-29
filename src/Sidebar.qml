@@ -150,7 +150,7 @@ Rectangle {
             iconColor: root.mutedColor
             hoverColor: root.textColor
             textScale: root.textScale
-            tooltip: "Dashboard (Ctrl+Shift+H)"
+            tooltip: backend.keys("Dashboard (Ctrl+Shift+H)")
             onClicked: root.dashboardRequested()
         }
 
@@ -161,7 +161,7 @@ Rectangle {
             iconColor: root.mutedColor
             hoverColor: root.textColor
             textScale: root.textScale
-            tooltip: "New note (Ctrl+N)"
+            tooltip: backend.keys("New note (Ctrl+N)")
             onClicked: root.newNoteRequested(root.targetFolder)
         }
 
@@ -1028,7 +1028,7 @@ Rectangle {
             iconColor: root.mutedColor
             hoverColor: root.textColor
             textScale: root.textScale * 0.9
-            tooltip: sync.remoteUrl.length > 0 ? "Sync now (Ctrl+Alt+S)" : "Save a version now (Ctrl+Alt+S)"
+            tooltip: backend.keys(sync.remoteUrl.length > 0 ? "Sync now (Ctrl+Alt+S)" : "Save a version now (Ctrl+Alt+S)")
             onClicked: root.syncNowRequested()
         }
     }

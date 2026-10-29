@@ -2,6 +2,7 @@
 
 #include "layout.h"
 #include "moc.h"
+#include "sync.h"
 #include "noteindex.h"
 #include "notesapi.h"
 
@@ -53,6 +54,8 @@ QString git(const QString &dir, const QStringList &args) {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    // Reading must not take the lock a sync running at the same time needs.
+    env.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
     process.setProcessEnvironment(env);
     process.start(program, args);
     if (!process.waitForFinished(20000)) {
@@ -234,18 +237,19 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
     };
 
     QString history = QStringLiteral("files");
+    // The notes' own repository, as version history uses: not one of the
+    // whole home folder.
+    const QString top = Sync::repositoryOf(root);
     // The whole history, not just the days shown: a note's last version
     // says when it last changed, where the file's date only says when git
     // last wrote it (a fresh clone or a pull makes every note look new).
-    const QString log = git(root, {QStringLiteral("-c"), QStringLiteral("core.quotePath=false"), QStringLiteral("log"),
+    const QString log = top.isEmpty() ? QString() : git(root, {QStringLiteral("-c"), QStringLiteral("core.quotePath=false"), QStringLiteral("log"),
                                    QStringLiteral("--format=%x01%aI"), QStringLiteral("--name-status"),
                                    QStringLiteral("-z"), QStringLiteral("--relative"), QStringLiteral("--"),
                                    QStringLiteral(".")});
     // A repository with no versions yet has no log, but git still knows
     // which notes are new.
-    const bool repository = !log.isNull()
-        || git(root, {QStringLiteral("rev-parse"), QStringLiteral("--is-inside-work-tree")}).trimmed() == QLatin1String("true");
-    if (repository) {
+    if (!top.isEmpty()) {
         history = QStringLiteral("git");
         // Newest first, so a rename is seen before the older changes made
         // under the old name, which then count for the note as it is named now.
@@ -289,7 +293,6 @@ QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int 
         const QString changes = git(root, {QStringLiteral("-c"), QStringLiteral("core.quotePath=false"),
                                            QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z"),
                                            QStringLiteral("--untracked-files=all"), QStringLiteral(".")});
-        const QString top = git(root, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}).trimmed();
         const QDir notes(QFileInfo(root).canonicalFilePath());
         const QStringList entries = changes.split(QLatin1Char('\0'), Qt::SkipEmptyParts);
         for (int i = 0; i < entries.size(); ++i) {

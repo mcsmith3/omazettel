@@ -4,6 +4,16 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 PKGBUILD_DIR="$ROOT/pkgbuild"
 
+# macOS: build OmaZettel.app and put it in /Applications, replacing an
+# older copy.
+if [ "$(uname -s)" = Darwin ]; then
+  "$ROOT/bin/build"
+  rm -rf /Applications/OmaZettel.app
+  mv "$ROOT/build/OmaZettel.app" /Applications/
+  echo "Installed /Applications/OmaZettel.app"
+  exit 0
+fi
+
 if ! command -v makepkg >/dev/null 2>&1; then
   echo "makepkg is required to build and install the Arch package." >&2
   exit 1

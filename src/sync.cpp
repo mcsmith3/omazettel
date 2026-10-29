@@ -32,18 +32,36 @@ QProcessEnvironment gitEnvironment() {
         env.insert(QStringLiteral("GIT_SSH_COMMAND"), QStringLiteral("ssh -o BatchMode=yes"));
     env.insert(QStringLiteral("GIT_MERGE_AUTOEDIT"), QStringLiteral("no"));
     env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    // Reading the status must not take the lock a sync running at the same
+    // time needs.
+    env.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
     return env;
+}
+
+// The repository's index lock, which git leaves behind when it is stopped
+// halfway (or crashes), after which every git step fails until it goes.
+QString indexLockOf(const QString &dir) {
+    QProcess process;
+    process.setWorkingDirectory(dir);
+    process.setProcessEnvironment(gitEnvironment());
+    process.start(QStandardPaths::findExecutable(QStringLiteral("git")),
+                  {QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir")});
+    if (!process.waitForFinished(5000) || process.exitCode() != 0)
+        return {};
+    const QString gitDir = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    return gitDir.isEmpty() ? QString() : gitDir + QStringLiteral("/index.lock");
 }
 
 // Runs git in dir and waits. Returns true on exit code 0.
 bool runGit(const QString &dir, const QStringList &args, QString *out, QString *err,
-            int timeoutMs, int *exitCode = nullptr) {
+            int timeoutMs, int *exitCode = nullptr, bool retried = false) {
     const QString program = QStandardPaths::findExecutable(QStringLiteral("git"));
     if (program.isEmpty()) {
         if (err)
             *err = QStringLiteral("git is not installed.");
         return false;
     }
+    const QDateTime started = QDateTime::currentDateTime();
     QProcess process;
     process.setWorkingDirectory(dir);
     process.setProcessEnvironment(gitEnvironment());
@@ -51,16 +69,30 @@ bool runGit(const QString &dir, const QStringList &args, QString *out, QString *
     if (!process.waitForFinished(timeoutMs)) {
         process.kill();
         process.waitForFinished(2000);
+        // Stopped halfway, git leaves its lock: take away the one it made.
+        const QString lock = indexLockOf(dir);
+        if (!lock.isEmpty() && QFileInfo::exists(lock) && QFileInfo(lock).lastModified() >= started.addSecs(-1))
+            QFile::remove(lock);
         if (err)
             *err = QStringLiteral("git %1 took too long.").arg(args.value(0));
         if (exitCode)
             *exitCode = -1;
         return false;
     }
+    const QString errors = QString::fromUtf8(process.readAllStandardError()).trimmed();
+    // A lock nobody has touched for ten minutes was left by a git that
+    // stopped halfway, not one still at work: remove it and try once more.
+    if (!retried && process.exitCode() != 0 && errors.contains(QLatin1String("index.lock"))
+            && errors.contains(QLatin1String("File exists"))) {
+        const QString lock = indexLockOf(dir);
+        if (!lock.isEmpty() && QFileInfo(lock).lastModified().secsTo(QDateTime::currentDateTime()) > 600
+                && QFile::remove(lock))
+            return runGit(dir, args, out, err, timeoutMs, exitCode, true);
+    }
     if (out)
         *out = QString::fromUtf8(process.readAllStandardOutput());
     if (err)
-        *err = QString::fromUtf8(process.readAllStandardError()).trimmed();
+        *err = errors;
     if (exitCode)
         *exitCode = process.exitCode();
     return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
@@ -218,10 +250,9 @@ void Sync::refresh() {
     m_changeCount = 0;
     m_gitConflicts.clear();
     m_conflictCopies.clear();
+    m_outerRepository.clear();
     if (!m_root.isEmpty()) {
-        QString top;
-        if (runGit(m_root, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}, &top, nullptr, 5000))
-            m_repoRoot = QFileInfo(top.trimmed()).canonicalFilePath();
+        m_repoRoot = repositoryOf(m_root, &m_outerRepository);
         if (!m_repoRoot.isEmpty()) {
             QString out;
             if (git({QStringLiteral("symbolic-ref"), QStringLiteral("--short"), QStringLiteral("HEAD")}, &out))
@@ -285,12 +316,59 @@ bool Sync::enable() {
     return isRepo();
 }
 
+QString Sync::repositoryOf(const QString &notesRoot, QString *ignored) {
+    if (ignored)
+        ignored->clear();
+    QString top;
+    if (notesRoot.isEmpty()
+            || !runGit(notesRoot, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}, &top, nullptr, 5000))
+        return {};
+    const QString repository = QFileInfo(top.trimmed()).canonicalFilePath();
+    const QString notes = QFileInfo(notesRoot).canonicalFilePath();
+    const QString home = QFileInfo(QDir::homePath()).canonicalFilePath();
+    // A repository of the whole home folder (kept for settings files, or
+    // made by a stray git init) is not the notes' own: a sync would save and
+    // send everything in the home folder.
+    const bool aboveHome = repository == QLatin1String("/")
+        || (!home.isEmpty() && (repository == home || home.startsWith(repository + QLatin1Char('/'))));
+    if (repository != notes && aboveHome) {
+        if (ignored)
+            *ignored = repository;
+        return {};
+    }
+    return repository;
+}
+
+QString Sync::checkRemoteAddress(const QString &url) {
+    const QString address = url.trimmed();
+    if (address.isEmpty())
+        return {};
+    if (address.contains(QRegularExpression(QStringLiteral("\\s"))))
+        return QStringLiteral("A remote's address has no spaces in it.");
+    // https://github.com:you/notes.git: the SSH address's colon in an https
+    // one, which git reads as a port number.
+    static const QRegularExpression colonPath(
+        QStringLiteral("^(https?://)([^/@]+@)?([^/:@]+):(?!\\d+(?:/|$))(.+)$"));
+    const QRegularExpressionMatch colon = colonPath.match(address);
+    if (colon.hasMatch())
+        return QStringLiteral("In an https address a slash follows the server's name: %1%2%3/%4")
+            .arg(colon.captured(1), colon.captured(2), colon.captured(3), colon.captured(4));
+    // github.com/you/notes.git: git would take it for a folder on this computer.
+    static const QRegularExpression noScheme(QStringLiteral("^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/\\S+$"));
+    if (noScheme.match(address).hasMatch() && !QFileInfo::exists(address))
+        return QStringLiteral("Add https:// at the start: https://%1").arg(address);
+    return {};
+}
+
 bool Sync::setRemote(const QString &url) {
     m_error.clear();
     if (m_repoRoot.isEmpty())
         return false;
     QString err;
     const QString trimmed = url.trimmed();
+    m_error = checkRemoteAddress(trimmed);
+    if (!m_error.isEmpty())
+        return false;
     bool ok;
     if (trimmed.isEmpty())
         ok = git({QStringLiteral("remote"), QStringLiteral("remove"), QStringLiteral("origin")}, nullptr, &err);
@@ -376,7 +454,10 @@ Sync::Result Sync::runSync(const QString &repoRoot, const QString &branch, bool 
 
     // 1. Save this device's changes as a version.
     if (!runGit(repoRoot, {QStringLiteral("add"), QStringLiteral("-A")}, nullptr, &err, 60000)) {
-        result.message = lastLine(err);
+        const Explained why = explain(err, QString(), QStringLiteral("add"));
+        result.message = why.message;
+        result.kind = why.kind;
+        result.details = err;
         return result;
     }
     runGit(repoRoot, {QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--quiet")},
@@ -387,7 +468,10 @@ Sync::Result Sync::runSync(const QString &repoRoot, const QString &branch, bool 
             .arg(QSysInfo::machineHostName(), QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         if (!runGit(repoRoot, identity + QStringList{QStringLiteral("commit"), QStringLiteral("-m"), message},
                     nullptr, &err, 60000)) {
-            result.message = QStringLiteral("Could not save a version: %1").arg(lastLine(err));
+            const Explained why = explain(err, QString(), QStringLiteral("commit"));
+            result.message = QStringLiteral("Could not save a version: %1").arg(why.message);
+            result.kind = why.kind;
+            result.details = err;
             return result;
         }
         committed = true;
@@ -815,6 +899,15 @@ Sync::Explained Sync::explain(const QString &errorOutput, const QString &remoteU
                                                        || lower.contains(QLatin1String("non-fast-forward"))))
         return {QStringLiteral("%1 has versions this device does not have yet. Sync again to bring them in first.").arg(host),
                 QStringLiteral("behind")};
+    if (lower.contains(QLatin1String("took too long")))
+        return {QStringLiteral("git %1 took too long and was stopped. A very large notes folder, or one that iCloud Drive or "
+                               "another sync service is also syncing, can do this.").arg(step),
+                QStringLiteral("slow")};
+    if (lower.contains(QLatin1String("index.lock")) && lower.contains(QLatin1String("file exists")))
+        return {QStringLiteral("Another git command is working in this notes folder, or one stopped halfway and left its "
+                               "lock file behind (.git/index.lock). If no git command is running, delete that file and "
+                               "sync again; OmaZettel removes it itself once it is ten minutes old."),
+                QStringLiteral("lock")};
     if (lower.contains(QLatin1String("host key verification failed")))
         return {QStringLiteral("This computer does not know %1's SSH key yet. Run once in a terminal: ssh -T git@%1 "
                                "and answer yes.").arg(host),
