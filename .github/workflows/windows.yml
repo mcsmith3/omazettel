@@ -48,10 +48,20 @@ jobs:
           for suite in "build-tests-notes tests/notes/notes.pro tst_notes" "build-tests-upstream tests/tests.pro tst_omazettel"; do
             set -- $suite
             mkdir -p "$1"
-            (cd "$1" && qmake6 "../$2" >/dev/null && mingw32-make -j"$jobs" >/dev/null)
+            if ! (cd "$1" && qmake6 "../$2" > build.txt 2>&1 && mingw32-make -j"$jobs" >> build.txt 2>&1); then
+              echo "Building $3 failed:"
+              grep -iE 'error|undefined' "$1/build.txt" | head -40
+              status=1
+              continue
+            fi
             echo "Running $3"
             (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3.exe" > results.txt 2>&1) || status=1
-            grep -E '^(FAIL!|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt" || true
+            if grep -q '^Totals' "$1/results.txt"; then
+              grep -E '^(FAIL!|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt"
+            else
+              echo "$3 stopped before the end; its last lines:"
+              tail -40 "$1/results.txt"
+            fi
           done
           exit $status
       - name: Package
