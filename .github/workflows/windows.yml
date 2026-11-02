@@ -82,9 +82,13 @@ jobs:
           Stop-Process -Id $app.Id
           Write-Host "omazettel.exe is running; files:"
           Get-ChildItem $folder.FullName | Measure-Object | ForEach-Object { "$($_.Count) entries" }
+      # The folder itself, so the download is one zip with OmaZettel's
+      # folder inside rather than a zip inside a zip.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: omazettel-windows
-          path: dist/*.zip
+          path: |
+            dist/
+            !dist/*.zip
           if-no-files-found: warn
