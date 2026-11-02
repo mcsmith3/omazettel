@@ -386,7 +386,7 @@ int NoteIndex::rewriteLinks(const QVariantMap &moves, const QString &skipPath) {
             continue;
         QSaveFile out(path);
         out.setDirectWriteFallback(true);
-        if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+        if (!out.open(QIODevice::WriteOnly))
             continue;
         out.write(rewritten.toUtf8());
         if (out.commit()) {

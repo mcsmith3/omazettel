@@ -66,7 +66,7 @@ QStringList create(const QString &root) {
         if (QFileInfo::exists(path))
             continue;
         QSaveFile file(path);
-        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        if (file.open(QIODevice::WriteOnly)) {
             file.write(text.toUtf8());
             if (file.commit())
                 made.append(name);

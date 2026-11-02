@@ -127,7 +127,7 @@ QStringList absolutePaths(const QString &root, const QString &names) {
 bool writeText(const QString &path, const QString &text) {
     QSaveFile file(path);
     file.setDirectWriteFallback(true);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!file.open(QIODevice::WriteOnly))
         return false;
     file.write(text.toUtf8());
     return file.commit();
@@ -985,7 +985,7 @@ void Sync::log(const QString &repoRoot, const QString &what, const Result &resul
         }
     }
     QFile file(path);
-    if (!file.open(QIODevice::Append | QIODevice::Text))
+    if (!file.open(QIODevice::Append))
         return;
     QString entry = QStringLiteral("%1  %2  %3  %4: %5\n")
                         .arg(QDateTime::currentDateTime().toString(Qt::ISODate), repoRoot, what,

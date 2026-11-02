@@ -43,7 +43,7 @@
 namespace {
 QString readFile(const QString &path) {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (!file.open(QIODevice::ReadOnly))
         return QString();
     return QString::fromUtf8(file.readAll());
 }
@@ -1616,7 +1616,7 @@ private slots:
         QCOMPARE(syncA.state(), QStringLiteral("clean"));
 
         // Device B: a clone.
-        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), remote, b});
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), QStringLiteral("-c"), QStringLiteral("core.autocrlf=false"), remote, b});
         Sync syncB;
         syncB.setRoot(b);
         QVERIFY(syncB.isRepo());
@@ -1695,7 +1695,7 @@ private slots:
         QSignalSpy syncedA(&syncA, &Sync::synced);
         syncA.syncNow();
         QVERIFY(syncedA.wait(60000));
-        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), remote, b});
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), QStringLiteral("-c"), QStringLiteral("core.autocrlf=false"), remote, b});
         Sync syncB;
         syncB.setRoot(b);
         QSignalSpy syncedB(&syncB, &Sync::synced);
@@ -1751,6 +1751,9 @@ private slots:
     }
 
     void leavesAHomeFolderRepositoryAlone() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
             QSKIP("git is not installed.");
         // A home folder that is a git repository, with the notes inside it.
@@ -2087,6 +2090,9 @@ private slots:
     }
 
     void followsTheOmarchyTheme() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         // A home of its own with a current Omarchy theme.
         QTemporaryDir home;
         const QByteArray realHome = qgetenv("HOME");

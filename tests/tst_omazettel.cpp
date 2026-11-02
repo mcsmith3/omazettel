@@ -1408,6 +1408,9 @@ private slots:
     }
 
     void takesTheCodePanelFromTheTheme() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         QTemporaryDir homeDirectory;
         QVERIFY(homeDirectory.isValid());
 
@@ -1565,6 +1568,9 @@ private slots:
     }
 
     void reportsThemeChangesOnlyWhenTheyHappen() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         ScopedTheme theme("mode = \"dark\"\nbackground = \"#111111\"\n");
         QVERIFY(theme.ok);
         Backend backend;
@@ -1693,6 +1699,9 @@ private slots:
     }
 
     void loadsCurrentOmarchyTheme() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         ScopedTheme theme(
             "mode = \"light\"\n"
             "accent = \"#112233\"\n"
@@ -1754,6 +1763,9 @@ private slots:
     }
 
     void fallsBackForSelectionColors() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         QFETCH(QByteArray, palette);
         QFETCH(QString, selection);
         QFETCH(QString, selectionForeground);
@@ -1798,6 +1810,9 @@ private slots:
     }
 
     void keepsDefaultsForColorsItCannotParse() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         ScopedTheme theme(
             "mode = \"dark\"          # warmed ink\r\n"
             "accent = \"#112233\"     # shell-white pigment\r\n"
@@ -1815,6 +1830,9 @@ private slots:
     }
 
     void takesItsDefaultsFromTheModeTheThemeAsksFor() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         ScopedTheme theme(
             "mode = \"light\"\n"
             "background = \"#ffffff\"\n"

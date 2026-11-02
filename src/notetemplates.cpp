@@ -173,7 +173,7 @@ void NoteTemplates::ensureDefaults() {
     QDir().mkpath(dir);
     for (const auto &[name, text] : starterTemplates(m_root)) {
         QSaveFile file(QDir(dir).filePath(name + QStringLiteral(".md")));
-        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        if (file.open(QIODevice::WriteOnly)) {
             file.write(text.toUtf8());
             file.commit();
         }
@@ -344,7 +344,7 @@ QVariantMap NoteTemplates::createAt(const QString &name, const QString &title,
 
     const QString path = Vault::uniquePath(folderPath, baseName, QStringLiteral("md"));
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly)) {
         m_lastError = QStringLiteral("Could not create %1.").arg(QFileInfo(path).fileName());
         return {};
     }

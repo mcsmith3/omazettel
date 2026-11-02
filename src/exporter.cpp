@@ -37,7 +37,7 @@ QString readText(const QString &path) {
 
 bool writeText(const QString &path, const QString &text) {
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!file.open(QIODevice::WriteOnly))
         return false;
     file.write(text.toUtf8());
     return file.commit();

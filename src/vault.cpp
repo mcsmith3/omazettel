@@ -361,7 +361,7 @@ QString Vault::createNote(const QString &folder, const QString &title) {
 
     const QString path = uniquePath(target, noteFileName(name), extension);
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly)) {
         setError(QStringLiteral("Could not create %1.").arg(QFileInfo(path).fileName()));
         return QString();
     }
