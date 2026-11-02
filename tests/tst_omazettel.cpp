@@ -41,8 +41,12 @@
 // QTemporaryDir is made, including the test object's own.
 const bool realTemporaryPath = [] {
     const QString real = QFileInfo(QDir::tempPath()).canonicalFilePath();
-    if (!real.isEmpty())
+    if (!real.isEmpty()) {
         qputenv("TMPDIR", QFile::encodeName(real));
+        // Windows reads TMP and TEMP, which may hold a short "RUNNER~1" name.
+        qputenv("TMP", QFile::encodeName(QDir::toNativeSeparators(real)));
+        qputenv("TEMP", QFile::encodeName(QDir::toNativeSeparators(real)));
+    }
     return true;
 }();
 

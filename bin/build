@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 # Builds OmaZettel into build/: build/omazettel on Linux, build/OmaZettel.app
-# on macOS (with Qt, poppler-qt6 and pkgconf from Homebrew).
+# on macOS (with Qt, poppler-qt6 and pkgconf from Homebrew), and on Windows
+# build/omazettel.exe with omazettel.com for the command line (in MSYS2's
+# UCRT64 shell, with Qt and poppler-qt6 from MSYS2).
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -16,7 +18,16 @@ else
 fi
 
 MACOS=
+WINDOWS=
 QMAKE_ARGS=
+MAKE=make
+case "$(uname -s)" in
+  MINGW*|UCRT*|CLANG*|MSYS*)
+    WINDOWS=1
+    # qmake writes makefiles for mingw32-make on Windows.
+    if command -v mingw32-make >/dev/null 2>&1; then MAKE=mingw32-make; fi
+    ;;
+esac
 if [ "$(uname -s)" = Darwin ]; then
   MACOS=1
   # Homebrew keeps poppler-qt6 out of the usual places (it would clash with
@@ -35,20 +46,33 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 "$QMAKE" "$ROOT/omazettel.pro" $QMAKE_ARGS
-make -j"$JOBS"
+"$MAKE" -j"$JOBS"
 
 # The PDF view's reader, a separate library so OmaZettel runs without
 # poppler-qt6 (it then says what to install).
 PDF_LIBRARY=
 if pkg-config --exists poppler-qt6 2>/dev/null; then
   mkdir -p "$BUILD_DIR/pdf"
-  (cd "$BUILD_DIR/pdf" && "$QMAKE" "$ROOT/pdf/pdf.pro" $QMAKE_ARGS && make -j"$JOBS")
-  if [ -n "$MACOS" ]; then PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.dylib"; else PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.so"; fi
+  (cd "$BUILD_DIR/pdf" && "$QMAKE" "$ROOT/pdf/pdf.pro" $QMAKE_ARGS && "$MAKE" -j"$JOBS")
+  if [ -n "$MACOS" ]; then PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.dylib"
+  elif [ -n "$WINDOWS" ]; then PDF_LIBRARY="$BUILD_DIR/omazettel-pdf.dll"
+  else PDF_LIBRARY="$BUILD_DIR/libomazettel-pdf.so"; fi
   echo "Built $PDF_LIBRARY"
 elif [ -n "$MACOS" ]; then
   echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (brew install poppler-qt6 pkgconf)." >&2
+elif [ -n "$WINDOWS" ]; then
+  echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (pacman -S mingw-w64-ucrt-x86_64-poppler-qt6)." >&2
 else
   echo "poppler-qt6 is not installed, so PDFs won't show inside OmaZettel (sudo pacman -S poppler-qt6)." >&2
+fi
+
+if [ -n "$WINDOWS" ]; then
+  # The command line's companion: terminals find omazettel.com first, and it
+  # runs omazettel.exe with the terminal's input and output.
+  gcc -O2 -municode -o "$BUILD_DIR/omazettel.com" "$ROOT/packaging/windows/launcher.c"
+  echo "Built $BUILD_DIR/omazettel.exe and $BUILD_DIR/omazettel.com"
+  echo "packaging/windows/package.sh makes a folder that runs outside MSYS2."
+  exit 0
 fi
 
 if [ -z "$MACOS" ]; then

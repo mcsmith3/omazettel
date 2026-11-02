@@ -5,7 +5,9 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 
+#ifndef Q_OS_WIN
 #include <unistd.h>
+#endif
 
 SingleInstance::SingleInstance(QObject *parent) : QObject(parent) {
     m_server.setSocketOptions(QLocalServer::UserAccessOption);
@@ -22,7 +24,14 @@ SingleInstance::SingleInstance(QObject *parent) : QObject(parent) {
 QString SingleInstance::serverName() {
     // The tests use a name of their own, away from a real running window.
     const QString name = qEnvironmentVariable("OMAZETTEL_INSTANCE_NAME");
-    return name.isEmpty() ? QStringLiteral("omazettel-%1").arg(getuid()) : name;
+    if (!name.isEmpty())
+        return name;
+#ifdef Q_OS_WIN
+    // Windows pipe names are shared by everyone on the computer.
+    return QStringLiteral("omazettel-") + qEnvironmentVariable("USERNAME");
+#else
+    return QStringLiteral("omazettel-%1").arg(getuid());
+#endif
 }
 
 bool SingleInstance::forwardToRunning(const QStringList &files, int timeoutMs) {

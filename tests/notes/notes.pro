@@ -65,3 +65,6 @@ QT += widgets printsupport quickcontrols2 quickdialogs2 dbus network
 
 # The app's bundled files (the built-in theme template).
 RESOURCES += ../../src/resources.qrc
+
+# Windows: straight into the build folder, as elsewhere.
+win32: CONFIG -= debug_and_release debug_and_release_target

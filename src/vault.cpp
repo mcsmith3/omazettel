@@ -276,17 +276,39 @@ QString Vault::insideOrEmpty(const QString &path) const {
 }
 
 QString Vault::cleanName(const QString &name) {
-    QString cleaned = name;
-    // Path separators and control characters cannot be part of one file name.
-    for (QChar &c : cleaned) {
-        if (c == QLatin1Char('/') || c == QLatin1Char('\\') || c.category() == QChar::Other_Control)
-            c = QLatin1Char('-');
+    QString cleaned;
+    cleaned.reserve(name.size());
+    // Path separators and control characters cannot be part of one file name,
+    // and Windows takes none of : * ? " < > | either. Names are made the same
+    // everywhere, so notes from a Mac or Linux open on Windows too.
+    for (qsizetype i = 0; i < name.size(); ++i) {
+        const QChar c = name.at(i);
+        if (c == QLatin1Char(':') || c == QLatin1Char('|')) {
+            // "Planning: Budget" and "Planning:-Budget" both come out as one dash.
+            if (!cleaned.endsWith(QLatin1Char('-')) && (i + 1 >= name.size() || name.at(i + 1) != QLatin1Char('-')))
+                cleaned.append(QLatin1Char('-'));
+        } else if (c == QLatin1Char('/') || c == QLatin1Char('\\') || c.category() == QChar::Other_Control)
+            cleaned.append(QLatin1Char('-'));
+        else if (c == QLatin1Char('*') || c == QLatin1Char('?') || c == QLatin1Char('"') || c == QLatin1Char('<')
+                 || c == QLatin1Char('>'))
+            continue;
+        else
+            cleaned.append(c);
     }
     cleaned = cleaned.simplified();
-    // A leading dot would hide the note from the sidebar.
+    // A leading dot would hide the note from the sidebar, and Windows drops
+    // dots at the end of a name.
     while (cleaned.startsWith(QLatin1Char('.')))
         cleaned.remove(0, 1);
-    return cleaned.trimmed();
+    while (cleaned.endsWith(QLatin1Char('.')))
+        cleaned.chop(1);
+    cleaned = cleaned.trimmed();
+    // Names Windows keeps for devices.
+    static const QRegularExpression reserved(QStringLiteral("^(con|prn|aux|nul|com[1-9]|lpt[1-9])$"),
+                                             QRegularExpression::CaseInsensitiveOption);
+    if (reserved.match(cleaned).hasMatch())
+        cleaned += QStringLiteral(" note");
+    return cleaned;
 }
 
 QString Vault::noteFileName(const QString &name) {

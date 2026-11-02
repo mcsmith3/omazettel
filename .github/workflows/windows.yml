@@ -1,0 +1,80 @@
+name: Windows
+
+# Builds OmaZettel for Windows with Qt and Poppler from MSYS2 (UCRT64), the
+# way bin/build does there, runs both test suites, then packages a folder that
+# runs without MSYS2 and checks it starts. The zip is kept as an artifact to
+# try on a Windows computer. Nothing is published.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # Git for Windows from the runner, as people will have it.
+          path-type: inherit
+          install: zip
+          pacboy: >-
+            gcc:p make:p pkgconf:p
+            qt6-base:p qt6-declarative:p qt6-svg:p qt6-tools:p
+            poppler-qt6:p
+      - name: Build
+        run: bin/build
+      - name: Check the command line
+        run: |
+          build/omazettel.com --version | tee version.txt
+          grep -q "$(sed -n 's/^#define OMAZETTEL_VERSION "\(.*\)"/\1/p' src/main.cpp)" version.txt
+          mkdir -p smoke/notes
+          printf '# Plan\n\n- [ ] Ship it\n' > smoke/notes/Plan.md
+          build/omazettel.com tasks --vault smoke/notes --plain | tee tasks.txt
+          grep -q "Ship it" tasks.txt
+      - name: Test
+        run: |
+          jobs="$(nproc)"
+          status=0
+          for suite in "build-tests-notes tests/notes/notes.pro tst_notes" "build-tests-upstream tests/tests.pro tst_omazettel"; do
+            set -- $suite
+            mkdir -p "$1"
+            (cd "$1" && qmake6 "../$2" >/dev/null && mingw32-make -j"$jobs" >/dev/null)
+            echo "Running $3"
+            (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3.exe" > results.txt 2>&1) || status=1
+            grep -E '^(FAIL!|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt" || true
+          done
+          exit $status
+      - name: Package
+        if: always()
+        run: packaging/windows/package.sh
+      - name: Check the package runs without MSYS2
+        if: always()
+        shell: pwsh
+        run: |
+          $folder = Get-ChildItem dist -Directory | Select-Object -First 1
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & "$($folder.FullName)\omazettel.com" --version
+          if ($LASTEXITCODE -ne 0) { throw "omazettel.com --version failed ($LASTEXITCODE)" }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $app = Start-Process "$($folder.FullName)\omazettel.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($app.HasExited) { throw "omazettel.exe exited at once ($($app.ExitCode))" }
+          Stop-Process -Id $app.Id
+          Write-Host "omazettel.exe is running; files:"
+          Get-ChildItem $folder.FullName | Measure-Object | ForEach-Object { "$($_.Count) entries" }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: omazettel-windows
+          path: dist/*.zip
+          if-no-files-found: warn

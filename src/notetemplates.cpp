@@ -11,8 +11,10 @@
 #include <QSaveFile>
 #include <QSettings>
 
+#ifndef Q_OS_WIN
 #include <pwd.h>
 #include <unistd.h>
+#endif
 
 namespace {
 const QString defaultTemplateSetting = QStringLiteral("notes/defaultTemplate");
@@ -56,6 +58,9 @@ void NoteTemplates::setAuthor(const QString &author) {
 
 // The full name from the account, else the login name.
 QString NoteTemplates::systemAuthor() {
+#ifdef Q_OS_WIN
+    return qEnvironmentVariable("USERNAME");
+#else
     if (const passwd *entry = getpwuid(getuid())) {
         QString gecos = QString::fromLocal8Bit(entry->pw_gecos).section(QLatin1Char(','), 0, 0).trimmed();
         if (!gecos.isEmpty())
@@ -63,6 +68,7 @@ QString NoteTemplates::systemAuthor() {
         return QString::fromLocal8Bit(entry->pw_name);
     }
     return qEnvironmentVariable("USER");
+#endif
 }
 
 void NoteTemplates::setRoot(const QString &notesRoot) {

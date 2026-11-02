@@ -62,6 +62,15 @@ RESOURCES += src/resources.qrc
 
 # macOS: an OmaZettel.app bundle with its icon and the file types Finder can
 # open with it. bin/build adds the PDF add-on and the version.
+# Windows: omazettel.exe with its icon and version, built straight into the
+# build folder. bin/build adds omazettel.com, the command line's companion.
+win32 {
+    CONFIG -= debug_and_release debug_and_release_target
+    RC_ICONS = packaging/windows/omazettel.ico
+    QMAKE_TARGET_PRODUCT = OmaZettel
+    QMAKE_TARGET_DESCRIPTION = OmaZettel
+}
+
 macx {
     TARGET = OmaZettel
     ICON = packaging/macos/omazettel.icns
