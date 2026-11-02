@@ -55,12 +55,19 @@ jobs:
               continue
             fi
             echo "Running $3"
-            (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3.exe" > results.txt 2>&1) || status=1
-            if grep -q '^Totals' "$1/results.txt"; then
-              grep -E '^(FAIL!|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt"
+            # Qt Test writes its own results file; what the tests print
+            # themselves goes to output.txt.
+            code=0
+            (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3.exe" -o results.txt,txt > output.txt 2>&1) || code=$?
+            echo "$3 exited with $code"
+            [ "$code" = 0 ] || status=1
+            if grep -q '^Totals' "$1/results.txt" 2>/dev/null; then
+              grep -E '^(FAIL!|SKIP|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt"
             else
-              echo "$3 stopped before the end; its last lines:"
-              tail -40 "$1/results.txt"
+              echo "$3 stopped before the end. Its results:"
+              tail -15 "$1/results.txt" 2>/dev/null || echo "(none)"
+              echo "What it printed last:"
+              tail -15 "$1/output.txt"
             fi
           done
           exit $status
