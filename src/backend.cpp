@@ -913,7 +913,7 @@ void Backend::saveTo(const QUrl &url) {
     // Without a temporary file beside it, as in a folder only the file itself
     // may be written in, write the file in place rather than fail.
     file.setDirectWriteFallback(true);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly)) {
         setStatus(QStringLiteral("Could not save %1.").arg(targetName));
         emit saveFailed();
         return;

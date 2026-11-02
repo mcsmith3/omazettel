@@ -11,7 +11,12 @@
 #include <QRegularExpression>
 #include <QTextStream>
 
+#ifdef Q_OS_WIN
+#include <io.h>
+#include <stdio.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -398,7 +403,12 @@ int runVerb(const NotesApi::Tool &tool, const QStringList &arguments) {
         }
     }
 
-    const bool asJson = json == 1 || (json == -1 && !isatty(STDOUT_FILENO));
+#ifdef Q_OS_WIN
+    const bool terminal = _isatty(_fileno(stdout));
+#else
+    const bool terminal = isatty(STDOUT_FILENO);
+#endif
+    const bool asJson = json == 1 || (json == -1 && !terminal);
     const auto report = [asJson](const QString &message) {
         if (asJson)
             printJson({{QStringLiteral("error"), message}});

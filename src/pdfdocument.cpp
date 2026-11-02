@@ -37,6 +37,8 @@ const Reader &reader() {
         // In the app bundle's PlugIns folder (Contents/MacOS/../PlugIns).
         const QString file = QStringLiteral("libomazettel-pdf.dylib");
         candidates << QDir(appDir).filePath(QStringLiteral("../PlugIns/") + file);
+#elif defined(Q_OS_WIN)
+        const QString file = QStringLiteral("omazettel-pdf.dll");
 #else
         const QString file = QStringLiteral("libomazettel-pdf.so");
 #endif
@@ -97,6 +99,8 @@ void PdfDocument::load() {
                                      "Open shows it in your PDF viewer meanwhile.")
 #ifdef Q_OS_MACOS
                           .arg(QStringLiteral("brew install poppler-qt6, then build OmaZettel again"));
+#elif defined(Q_OS_WIN)
+                          .arg(QStringLiteral("omazettel-pdf.dll beside OmaZettel, which the Windows download includes"));
 #else
                           .arg(QStringLiteral("sudo pacman -S poppler-qt6"));
 #endif

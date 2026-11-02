@@ -17,8 +17,6 @@
 #include <QStandardPaths>
 #include <QTimer>
 
-#include <unistd.h>
-
 #include "backend.h"
 #include "cli.h"
 #include "systemtheme.h"
@@ -223,7 +221,7 @@ int main(int argc, char *argv[]) {
             if (!hyprctl.isEmpty()) {
                 // Hyprland's Lua dispatcher first, as Omarchy's own scripts
                 // do; the older "focuswindow" form for older Hyprland.
-                const QString target = QStringLiteral("pid:%1").arg(getpid());
+                const QString target = QStringLiteral("pid:%1").arg(QCoreApplication::applicationPid());
                 auto *focus = new QProcess(window);
                 QObject::connect(focus, &QProcess::finished, focus, [focus, hyprctl, target](int code) {
                     if (code != 0)
