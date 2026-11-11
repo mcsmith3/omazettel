@@ -3105,6 +3105,9 @@ private slots:
         backend.saveAs(QUrl::fromLocalFile(path));
         QSignalSpy externalChangeSpy(&backend, &Backend::externalChangeDetected);
 
+        // Qt's watcher on Windows tells changes by modified time alone, so a
+        // write in the same millisecond as our save would go unseen.
+        QTest::qWait(50);
         writeFile(path, "theirs");
         QTRY_VERIFY(externalChangeSpy.count() >= 1);
         backend.reloadFromDisk();
