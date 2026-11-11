@@ -2,6 +2,10 @@
 // which tracks upstream Omawrite's tests.
 
 #include <QtTest>
+#include <QTextBlock>
+#include <QAbstractTextDocumentLayout>
+#include <QTextLayout>
+#include <QQuickTextDocument>
 #include <QPainter>
 #include <QPdfWriter>
 #include <QQmlComponent>
@@ -709,6 +713,60 @@ private slots:
         editor->setProperty("cursorPosition", editor->property("length"));
         QTest::qWait(50);
         QVERIFY(!completer->property("opened").toBool());
+    }
+
+    // A heading's #s hang in the left margin, so its words start where the
+    // body text does; # lines inside code stay where they are.
+    void hangsHeadingMarkersInTheMargin() {
+        QTemporaryDir dir;
+        writeFile(dir.filePath(QStringLiteral("Plan.md")),
+                  "# Plan\n\nBody text starts here.\n\n### Next steps\n\n```\n# a comment\n```\n");
+        Backend backend;
+        Vault vault;
+        QVERIFY(vault.openFolder(dir.path()));
+        QQmlEngine engine;
+        QScopedPointer<QObject> window(loadMain(engine, backend, vault));
+        QVERIFY(window);
+        QMetaObject::invokeMethod(window.get(), "openNote",
+                                  Q_ARG(QVariant, QUrl::fromLocalFile(dir.filePath(QStringLiteral("Plan.md")))));
+        auto *editor = window->findChild<QQuickItem *>(QStringLiteral("sourceEditor"));
+        QVERIFY(editor);
+        QTRY_VERIFY(editor->property("text").toString().startsWith(QStringLiteral("# Plan")));
+        auto *quickDocument = editor->property("textDocument").value<QQuickTextDocument *>();
+        QVERIFY(quickDocument);
+        QTextDocument *document = quickDocument->textDocument();
+
+        // Where the character at column starts in block, as laid out.
+        const auto xAt = [document, editor](int blockNumber, int column) {
+            QRectF caret;
+            QMetaObject::invokeMethod(editor, "positionToRectangle", Q_RETURN_ARG(QRectF, caret),
+                                      Q_ARG(int, document->findBlockByNumber(blockNumber).position() + column));
+            return caret.x();
+        };
+        if (qEnvironmentVariableIsSet("OMAZETTEL_HEADING_SHOT")) {
+            auto *quickWindow = qobject_cast<QQuickWindow *>(window.get());
+            quickWindow->resize(1000, 600);
+            quickWindow->show();
+            QTest::qWait(1000);
+            quickWindow->grabWindow().save(qEnvironmentVariable("OMAZETTEL_HEADING_SHOT"));
+        }
+
+        const qreal body = xAt(2, 0);
+        QVERIFY(qAbs(xAt(0, 2) - body) < 0.5);  // "# Plan"
+        QVERIFY(qAbs(xAt(4, 4) - body) < 0.5);  // "### Next steps"
+        // The #s are out in the margin, left of the editor's edge.
+        QVERIFY(document->findBlockByNumber(0).blockFormat().textIndent() < 0);
+        QVERIFY(document->findBlockByNumber(4).blockFormat().textIndent()
+                < document->findBlockByNumber(0).blockFormat().textIndent());
+        QCOMPARE(document->findBlockByNumber(2).blockFormat().textIndent(), 0.0);
+        QVERIFY(qAbs(xAt(7, 0) - body) < 0.5);  // "# a comment" is code
+
+        // Typing: a new heading hangs; one that becomes code no longer does.
+        editor->setProperty("text", QStringLiteral("Intro\n\n## Added\n\n```\n## Now code\n"));
+        QTRY_VERIFY(qAbs(xAt(2, 3) - xAt(0, 0)) < 0.5);
+        QVERIFY(qAbs(xAt(5, 0) - xAt(0, 0)) < 0.5);
+        editor->setProperty("text", QStringLiteral("Intro\n\n```\n## Added\n"));
+        QTRY_VERIFY(qAbs(xAt(3, 0) - xAt(0, 0)) < 0.5);
     }
 
     void quickSwitcherFindsAndCreatesNotes() {

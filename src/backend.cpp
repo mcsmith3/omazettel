@@ -10,6 +10,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QProcess>
@@ -857,6 +858,24 @@ QStringList Backend::selectableFontFamilies(const QStringList &families) {
 void Backend::documentFontChanged() {
     if (m_highlighter)
         m_highlighter->refreshFont();
+    // The hanging #s are as wide as the new font makes them.
+    if (!m_document || !headingIndentsNeeded())
+        return;
+    m_formattingTypography = true;
+    if (!m_document->isUndoAvailable() && !m_document->isRedoAvailable()) {
+        // Nothing to undo yet, so keep the change off the undo stack.
+        const bool undoEnabled = m_document->isUndoRedoEnabled();
+        m_document->setUndoRedoEnabled(false);
+        applyHeadingIndents();
+        m_document->setUndoRedoEnabled(undoEnabled);
+    } else {
+        // Rides along with the last edit, so undo has no step of its own.
+        QTextCursor cursor(m_document);
+        cursor.joinPreviousEditBlock();
+        applyHeadingIndents();
+        cursor.endEditBlock();
+    }
+    m_formattingTypography = false;
 }
 
 void Backend::loadDocumentText(const QString &text) {
@@ -1373,9 +1392,49 @@ void Backend::applyDocumentTypography() {
     QTextCursor cursor(m_document);
     cursor.select(QTextCursor::Document);
     cursor.mergeBlockFormat(lineHeightFormat());
+    applyHeadingIndents();
     m_formattingTypography = false;
 
     m_document->setUndoRedoEnabled(undoEnabled);
+}
+
+// A heading's #s hang in the left margin, so its words start where the
+// text around it does: the first line is indented back by the width of the
+// "## " in front. Lines in a fenced code block are code, not headings.
+qreal Backend::headingIndent(const QTextBlock &block) const {
+    const QString text = block.text();
+    if (!text.startsWith(QLatin1Char('#'))
+        || block.userState() >= MarkdownHighlighter::InsideFence)
+        return 0;
+    static const QRegularExpression prefixRe(QStringLiteral("^#{1,6}\\s+"));
+    const QRegularExpressionMatch prefix = prefixRe.match(text);
+    if (!prefix.hasMatch())
+        return 0;
+    return -QFontMetricsF(m_document->defaultFont()).horizontalAdvance(prefix.captured(0));
+}
+
+// Typing a fence can turn headings below it into code, and the font sets the
+// width, so every line is checked, not only the one edited.
+bool Backend::headingIndentsNeeded() const {
+    for (QTextBlock block = m_document->begin(); block.isValid(); block = block.next()) {
+        if (!qFuzzyCompare(1.0 + block.blockFormat().textIndent(), 1.0 + headingIndent(block)))
+            return true;
+    }
+    return false;
+}
+
+// Call inside an edit block, or with undo off.
+void Backend::applyHeadingIndents() {
+    QTextCursor cursor(m_document);
+    for (QTextBlock block = m_document->begin(); block.isValid(); block = block.next()) {
+        const qreal indent = headingIndent(block);
+        if (qFuzzyCompare(1.0 + block.blockFormat().textIndent(), 1.0 + indent))
+            continue;
+        QTextBlockFormat format;
+        format.setTextIndent(indent);
+        cursor.setPosition(block.position());
+        cursor.mergeBlockFormat(format);
+    }
 }
 
 void Backend::reapplyTypographyToChange() {
@@ -1392,25 +1451,30 @@ void Backend::reapplyTypographyToChange() {
     // Blocks that already have it are left alone: an undo brings their format
     // back with the text, and merging anyway would push a command that clears
     // the redo stack.
-    bool needed = false;
+    bool lineHeightNeeded = false;
     for (QTextBlock block = m_document->findBlock(start);
          block.isValid() && block.position() <= end; block = block.next()) {
         const QTextBlockFormat format = block.blockFormat();
         if (format.lineHeightType() != QTextBlockFormat::ProportionalHeight
                 || format.lineHeight() != typoraLineHeightPercent) {
-            needed = true;
+            lineHeightNeeded = true;
             break;
         }
     }
-    if (!needed)
+    const bool indentsNeeded = headingIndentsNeeded();
+    if (!lineHeightNeeded && !indentsNeeded)
         return;
 
     m_formattingTypography = true;
     QTextCursor cursor(m_document);
     cursor.joinPreviousEditBlock();
-    cursor.setPosition(start);
-    cursor.setPosition(end, QTextCursor::KeepAnchor);
-    cursor.mergeBlockFormat(lineHeightFormat());
+    if (lineHeightNeeded) {
+        cursor.setPosition(start);
+        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        cursor.mergeBlockFormat(lineHeightFormat());
+    }
+    if (indentsNeeded)
+        applyHeadingIndents();
     cursor.endEditBlock();
     m_formattingTypography = false;
 }

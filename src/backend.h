@@ -19,6 +19,8 @@ class QTextDocument;
 class QWindow;
 class QLockFile;
 
+class QTextBlock;
+
 class Backend : public QObject {
     Q_OBJECT
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY fileUrlChanged)
@@ -187,6 +189,9 @@ private:
     void scheduleWordCount();
     void applyDocumentTypography();
     void reapplyTypographyToChange();
+    qreal headingIndent(const QTextBlock &block) const;
+    bool headingIndentsNeeded() const;
+    void applyHeadingIndents();
     void scheduleRecovery();
     void writeRecovery();
     void scheduleAutoSave();
