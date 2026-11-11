@@ -42,7 +42,10 @@ ApplicationWindow {
     readonly property int editorWidth: Math.min(
         Math.round(writerFontMetrics.averageCharacterWidth * 65),
         Math.max(360, contentWidth - Math.round(writerFontMetrics.averageCharacterWidth * 20)),
-        Math.max(0, contentWidth - 48))
+        Math.max(0, contentWidth - 48 - headingHang))
+    // Room left of the text for a heading's "### ", which hangs in the margin
+    // so the heading's words line up with the text below.
+    readonly property int headingHang: Math.round(writerFontMetrics.averageCharacterWidth * 4)
     // OmaZettel: the notes sidebar takes the left edge; the writing area is
     // what is left.
     readonly property bool sidebarShown: vault.sidebarVisible
@@ -1731,7 +1734,7 @@ ApplicationWindow {
             TextEdit {
                 id: editor
                 objectName: "sourceEditor"
-                x: Math.round((editorFlick.width - width) / 2)
+                x: Math.max(win.headingHang, Math.round((editorFlick.width - width) / 2))
                 // The resting position counts from the window's top edge, so
                 // take back the top inset the Flickable already adds.
                 y: Math.max(0, Math.max(42, Math.round(win.height * 0.05)) - win.footerHeight)
