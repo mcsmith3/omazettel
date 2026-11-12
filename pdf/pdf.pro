@@ -9,3 +9,6 @@ PKGCONFIG += poppler-qt6
 DESTDIR = $$OUT_PWD/..
 SOURCES += ../src/pdfrender.cpp
 HEADERS += ../src/pdfrender.h
+
+# Windows: straight into the build folder, as elsewhere.
+win32: CONFIG -= debug_and_release debug_and_release_target

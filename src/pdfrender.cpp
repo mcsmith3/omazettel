@@ -1,6 +1,7 @@
 #include "pdfrender.h"
 
 #include <QDateTime>
+#include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
@@ -19,6 +20,9 @@ struct Cache {
     QString path;
     QDateTime modified;
     qint64 size = -1;
+    // The file's bytes: reading from memory leaves the file closed, so an
+    // export can replace it (Windows won't replace a file that is open).
+    QByteArray data;
     std::unique_ptr<Poppler::Document> document;
 };
 
@@ -38,7 +42,11 @@ Poppler::Document *documentFor(Cache &c, const QString &path) {
     Q_UNUSED(quiet);
     const QFileInfo info(path);
     if (c.path != path || c.modified != info.lastModified() || c.size != info.size() || !c.document) {
-        c.document = Poppler::Document::load(path);
+        c.document.reset();
+        QFile file(path);
+        c.data = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+        if (!c.data.isEmpty())
+            c.document = Poppler::Document::loadFromData(c.data);
         c.path = path;
         c.modified = info.lastModified();
         c.size = info.size();

@@ -1,0 +1,112 @@
+name: Windows
+
+# Builds OmaZettel for Windows with Qt and Poppler from MSYS2 (UCRT64), the
+# way bin/build does there, runs both test suites, then packages a folder that
+# runs without MSYS2 and checks it starts. The zip is kept as an artifact to
+# try on a Windows computer. Nothing is published.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # Git for Windows from the runner, as people will have it.
+          path-type: inherit
+          install: zip
+          pacboy: >-
+            gcc:p make:p pkgconf:p
+            qt6-base:p qt6-declarative:p qt6-svg:p qt6-tools:p
+            poppler-qt6:p
+      - name: Build
+        run: bin/build
+      - name: Check the command line
+        run: |
+          build/omazettel.com --version | tee version.txt
+          grep -q "$(sed -n 's/^#define OMAZETTEL_VERSION "\(.*\)"/\1/p' src/main.cpp)" version.txt
+          mkdir -p smoke/notes
+          printf '# Plan\n\n- [ ] Ship it\n' > smoke/notes/Plan.md
+          build/omazettel.com tasks --vault smoke/notes --plain | tee tasks.txt
+          grep -q "Ship it" tasks.txt
+      - name: Test
+        run: |
+          jobs="$(nproc)"
+          status=0
+          for suite in "build-tests-notes tests/notes/notes.pro tst_notes" "build-tests-upstream tests/tests.pro tst_omazettel"; do
+            set -- $suite
+            mkdir -p "$1"
+            if ! (cd "$1" && qmake6 "../$2" > build.txt 2>&1 && mingw32-make -j"$jobs" >> build.txt 2>&1); then
+              echo "Building $3 failed:"
+              grep -iE 'error|undefined' "$1/build.txt" | head -40
+              status=1
+              continue
+            fi
+            echo "Running $3"
+            # Qt Test writes its own results file; what the tests print
+            # themselves goes to output.txt.
+            code=0
+            (cd "$1" && QT_QPA_PLATFORM=offscreen "./$3.exe" -o results.txt,txt > output.txt 2>&1) || code=$?
+            echo "$3 exited with $code"
+            [ "$code" = 0 ] || status=1
+            if grep -q '^Totals' "$1/results.txt" 2>/dev/null; then
+              grep -E '^(FAIL!|SKIP|   Actual|   Expected|   Loc:|Totals)' "$1/results.txt"
+            else
+              echo "$3 stopped before the end. Its results:"
+              tail -15 "$1/results.txt" 2>/dev/null || echo "(none)"
+              echo "What it printed last:"
+              tail -15 "$1/output.txt"
+            fi
+          done
+          exit $status
+      - name: Package
+        if: always()
+        run: packaging/windows/package.sh
+      # As on a computer without MSYS2: its folder is renamed out of the way,
+      # so Qt can't fall back to the libraries and QML modules in it.
+      - name: Check the package runs without MSYS2
+        if: always()
+        shell: pwsh
+        run: |
+          $folder = Get-ChildItem dist -Directory | Select-Object -First 1
+          $msys = Join-Path $env:RUNNER_TEMP "msys64"
+          if (Test-Path $msys) { Rename-Item $msys "msys64-hidden" }
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          & "$($folder.FullName)\omazettel.com" --version
+          if ($LASTEXITCODE -ne 0) { throw "omazettel.com --version failed ($LASTEXITCODE)" }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_FORCE_STDERR_LOGGING = "1"
+          $env:OMAZETTEL_TIMING = "1"
+          $log = Join-Path $env:RUNNER_TEMP "omazettel-start.txt"
+          $app = Start-Process "$($folder.FullName)\omazettel.exe" -PassThru -RedirectStandardError $log
+          Start-Sleep -Seconds 8
+          $exited = $app.HasExited
+          if (-not $exited) { Stop-Process -Id $app.Id }
+          Get-Content $log
+          if ($exited) { throw "omazettel.exe exited at once ($($app.ExitCode))" }
+          if (Select-String -Path $log -Pattern 'not found|module "|Could not load' -Quiet) {
+            throw "omazettel.exe started with QML errors (above)"
+          }
+          Write-Host "omazettel.exe is running"
+      # The folder itself, so the download is one zip with OmaZettel's
+      # folder inside rather than a zip inside a zip.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: omazettel-windows
+          path: |
+            dist/
+            !dist/*.zip
+          if-no-files-found: warn

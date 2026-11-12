@@ -234,7 +234,7 @@ QString Backend::customizeThemeTemplate() {
     if (!QFileInfo(user).isFile()) {
         QDir().mkpath(QFileInfo(user).absolutePath());
         QFile file(user);
-        if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+        if (file.open(QIODevice::WriteOnly))
             file.write(AppTheme::builtinTemplate().toUtf8());
     }
     watchAppTheme();

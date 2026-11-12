@@ -117,7 +117,7 @@ void Citations::save() {
     const QString path = QDir(m_root).filePath(settingsSubpath);
     QDir().mkpath(QFileInfo(path).absolutePath());
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!file.open(QIODevice::WriteOnly))
         return;
     QString text = QStringLiteral(
         "# OmaZettel citations: a bibliography (BibTeX .bib or CSL JSON) and an optional\n"

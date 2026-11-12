@@ -43,7 +43,7 @@
 namespace {
 QString readFile(const QString &path) {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (!file.open(QIODevice::ReadOnly))
         return QString();
     return QString::fromUtf8(file.readAll());
 }
@@ -61,8 +61,12 @@ void writeFile(const QString &path, const QByteArray &contents) {
 // QTemporaryDir is made, including the test object's own.
 const bool realTemporaryPath = [] {
     const QString real = QFileInfo(QDir::tempPath()).canonicalFilePath();
-    if (!real.isEmpty())
+    if (!real.isEmpty()) {
         qputenv("TMPDIR", QFile::encodeName(real));
+        // Windows reads TMP and TEMP, which may hold a short "RUNNER~1" name.
+        qputenv("TMP", QFile::encodeName(QDir::toNativeSeparators(real)));
+        qputenv("TEMP", QFile::encodeName(QDir::toNativeSeparators(real)));
+    }
     return true;
 }();
 
@@ -93,6 +97,13 @@ private slots:
         QCOMPARE(Vault::cleanName(QStringLiteral("a/b\\c")), QStringLiteral("a-b-c"));
         QCOMPARE(Vault::cleanName(QStringLiteral("..hidden")), QStringLiteral("hidden"));
         QCOMPARE(Vault::cleanName(QStringLiteral("   ")), QString());
+        // Nothing Windows can't store in a file name.
+        QCOMPARE(Vault::cleanName(QStringLiteral("Demo Planning: Business 360")), QStringLiteral("Demo Planning- Business 360"));
+        QCOMPARE(Vault::cleanName(QStringLiteral("Demo-Planning:-Business")), QStringLiteral("Demo-Planning-Business"));
+        QCOMPARE(Vault::cleanName(QStringLiteral("Why \"now\"? <draft> a|b *x*")), QStringLiteral("Why now draft a-b x"));
+        QCOMPARE(Vault::cleanName(QStringLiteral("Notes...")), QStringLiteral("Notes"));
+        QCOMPARE(Vault::cleanName(QStringLiteral("con")), QStringLiteral("con note"));
+        QCOMPARE(Vault::noteFileName(QStringLiteral("Demo Planning: Business")).contains(QLatin1Char(':')), false);
     }
 
     void recognizesNoteFiles() {
@@ -772,7 +783,8 @@ private slots:
             "---\ntitle: \"{{title}}\"\nauthor: \"{{author}}\"\ndate: \"{{date}}\"\nid: {{id}}\n---\n\n"
             "# {{title}}\n{{date:yyyy/MM}} {{time}} in {{folder}} {{unknown}}\n- {{cursor}}\n"),
             QStringLiteral("Plan \"Q4\""), QStringLiteral("Matt"), QStringLiteral("Work"), now);
-        QCOMPARE(rendered.fileName, QStringLiteral("2026-10-20-Plan-\"Q4\""));
+        // The file name leaves out the quotes, which Windows can't store.
+        QCOMPARE(rendered.fileName, QStringLiteral("2026-10-20-Plan-Q4"));
         QCOMPARE(rendered.folder, QStringLiteral("Meetings"));
         QVERIFY(rendered.openExisting);
         // Quotes are escaped in the YAML header only.
@@ -1604,7 +1616,7 @@ private slots:
         QCOMPARE(syncA.state(), QStringLiteral("clean"));
 
         // Device B: a clone.
-        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), remote, b});
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), QStringLiteral("-c"), QStringLiteral("core.autocrlf=false"), remote, b});
         Sync syncB;
         syncB.setRoot(b);
         QVERIFY(syncB.isRepo());
@@ -1683,7 +1695,7 @@ private slots:
         QSignalSpy syncedA(&syncA, &Sync::synced);
         syncA.syncNow();
         QVERIFY(syncedA.wait(60000));
-        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), remote, b});
+        QProcess::execute(QStringLiteral("git"), {QStringLiteral("clone"), QStringLiteral("-q"), QStringLiteral("-c"), QStringLiteral("core.autocrlf=false"), remote, b});
         Sync syncB;
         syncB.setRoot(b);
         QSignalSpy syncedB(&syncB, &Sync::synced);
@@ -1739,6 +1751,9 @@ private slots:
     }
 
     void leavesAHomeFolderRepositoryAlone() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         if (QStandardPaths::findExecutable(QStringLiteral("git")).isEmpty())
             QSKIP("git is not installed.");
         // A home folder that is a git repository, with the notes inside it.
@@ -2075,6 +2090,9 @@ private slots:
     }
 
     void followsTheOmarchyTheme() {
+#ifdef Q_OS_WIN
+        QSKIP("Points HOME at a scratch folder, which Qt on Windows doesn't use for the home folder.");
+#endif
         // A home of its own with a current Omarchy theme.
         QTemporaryDir home;
         const QByteArray realHome = qgetenv("HOME");
@@ -3199,6 +3217,9 @@ private slots:
     }
 
     void writesMeetingNotesWithAnAgent() {
+#ifdef Q_OS_WIN
+        QSKIP("The fake agent here is a shell script, which Windows does not run.");
+#endif
         // A stand-in "claude" that answers like the real one.
         QTemporaryDir bin;
         QVERIFY(bin.isValid());
@@ -3272,6 +3293,9 @@ private slots:
     }
 
     void turnsMeetingRecorderMeetingsIntoNotes() {
+#ifdef Q_OS_WIN
+        QSKIP("The fake agent here is a shell script, which Windows does not run.");
+#endif
         // A stand-in "claude" that gives the answer in answer.json.
         QTemporaryDir bin;
         const QString fake = bin.filePath(QStringLiteral("claude"));

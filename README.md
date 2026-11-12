@@ -196,6 +196,44 @@ the app. Transcribing recordings isn't set up for macOS yet. Optionally,
 `brew install --cask font-jetbrains-mono` for the font OmaZettel uses on
 Omarchy (otherwise it uses Menlo).
 
+### Windows (early)
+
+OmaZettel builds on Windows with Qt and Poppler from [MSYS2](https://www.msys2.org).
+It's new there, so tell us what doesn't work. Install MSYS2 and
+[Git for Windows](https://git-scm.com/download/win), then in the
+**MSYS2 UCRT64** shell:
+
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-{gcc,make,pkgconf,qt6-base,qt6-declarative,qt6-svg,qt6-tools,poppler-qt6} zip
+git clone https://github.com/mcsmith3/omazettel.git
+cd omazettel
+./bin/build
+packaging/windows/package.sh
+```
+
+That makes `dist/OmaZettel-<version>-windows-x64/`, a folder that runs on
+its own: keep it somewhere such as `%LOCALAPPDATA%\Programs\OmaZettel` and open
+`omazettel.exe` (pin it to Start). Windows may warn that it protected your PC,
+since the build isn't signed: **More info**, then **Run anyway**. For the
+`omazettel` command, add the folder to your PATH; `omazettel.com` there is
+the command line's half, which terminals find before `omazettel.exe`.
+
+Notes you already sync from another computer: on that computer, run
+`omazettel tidy-names --apply` and sync, since Windows can't store names with
+`: * ? " < > |`. Then, before opening OmaZettel the first time (so it doesn't
+start a separate history), clone them with plain line endings, which
+OmaZettel keeps everywhere, to a folder outside OneDrive:
+
+```sh
+git clone -c core.autocrlf=false https://github.com/you/notes.git %USERPROFILE%\Notes
+```
+
+OneDrive and git sync on the same folder fight over the files, which can damage
+the history and slows OmaZettel down. For exports, install pandoc
+(`winget install JohnMacFarlane.Pandoc`). A slow start can be timed with
+`OMAZETTEL_TIMING=1`, which prints each step to stderr. Transcribing recordings isn't set up for Windows yet. Settings are kept in the
+registry, under `HKEY_CURRENT_USER\Software\omazettel`.
+
 ## Getting started
 
 1. Open **OmaZettel** from the app launcher.
@@ -781,7 +819,8 @@ You need the [requirements](#requirements) above: Qt 6.8 or newer
 `bin/build` also builds `libomazettel-pdf.so`, the PDF view's reader, which
 OmaZettel loads only when it shows a PDF. On macOS it builds
 `build/OmaZettel.app` instead, with the reader inside it (see
-[macOS](#macos-early)).
+[macOS](#macos-early)), and on Windows `build/omazettel.exe` and
+`omazettel.com` (see [Windows](#windows-early)).
 
 ```sh
 ./bin/build            # builds ./build/omazettel

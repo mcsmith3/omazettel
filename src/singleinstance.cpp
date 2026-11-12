@@ -5,7 +5,14 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 SingleInstance::SingleInstance(QObject *parent) : QObject(parent) {
     m_server.setSocketOptions(QLocalServer::UserAccessOption);
@@ -22,7 +29,14 @@ SingleInstance::SingleInstance(QObject *parent) : QObject(parent) {
 QString SingleInstance::serverName() {
     // The tests use a name of their own, away from a real running window.
     const QString name = qEnvironmentVariable("OMAZETTEL_INSTANCE_NAME");
-    return name.isEmpty() ? QStringLiteral("omazettel-%1").arg(getuid()) : name;
+    if (!name.isEmpty())
+        return name;
+#ifdef Q_OS_WIN
+    // Windows pipe names are shared by everyone on the computer.
+    return QStringLiteral("omazettel-") + qEnvironmentVariable("USERNAME");
+#else
+    return QStringLiteral("omazettel-%1").arg(getuid());
+#endif
 }
 
 bool SingleInstance::forwardToRunning(const QStringList &files, int timeoutMs) {
@@ -30,6 +44,11 @@ bool SingleInstance::forwardToRunning(const QStringList &files, int timeoutMs) {
     socket.connectToServer(serverName());
     if (!socket.waitForConnected(timeoutMs / 4))
         return false;
+#ifdef Q_OS_WIN
+    // Windows only lets the program in front hand the front to another, so
+    // let the running window come forward when it gets this.
+    AllowSetForegroundWindow(ASFW_ANY);
+#endif
     const QJsonObject request{{QStringLiteral("files"), QJsonArray::fromStringList(files)},
                               {QStringLiteral("activationToken"), qEnvironmentVariable("XDG_ACTIVATION_TOKEN")}};
     socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');

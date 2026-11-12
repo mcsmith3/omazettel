@@ -11,7 +11,17 @@
 #include <QRegularExpression>
 #include <QTextStream>
 
+#ifdef Q_OS_WIN
+#include <io.h>
+#include <stdio.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -398,7 +408,12 @@ int runVerb(const NotesApi::Tool &tool, const QStringList &arguments) {
         }
     }
 
-    const bool asJson = json == 1 || (json == -1 && !isatty(STDOUT_FILENO));
+#ifdef Q_OS_WIN
+    const bool terminal = _isatty(_fileno(stdout));
+#else
+    const bool terminal = isatty(STDOUT_FILENO);
+#endif
+    const bool asJson = json == 1 || (json == -1 && !terminal);
     const auto report = [asJson](const QString &message) {
         if (asJson)
             printJson({{QStringLiteral("error"), message}});
@@ -562,14 +577,62 @@ std::optional<int> Cli::handleArguments(const QStringList &arguments, const QStr
     return std::nullopt;
 }
 
+#ifdef Q_OS_WIN
+namespace {
+// The command line as Windows keeps it, in UTF-16. argv is in the ANSI code
+// page, which can't hold every note name.
+QStringList windowsArguments() {
+    int count = 0;
+    LPWSTR *list = CommandLineToArgvW(GetCommandLineW(), &count);
+    QStringList arguments;
+    for (int index = 0; list && index < count; ++index)
+        arguments.append(QString::fromWCharArray(list[index]));
+    LocalFree(list);
+    return arguments;
+}
+
+// omazettel.exe is a window app, so Windows gives it no terminal, and the
+// terminal handles omazettel.com hands down write nowhere. Join the terminal
+// of the program that started this one and write to it. Pipes and files are
+// left as they are, so `omazettel tasks | more`, `> file` and MCP still work.
+void useParentConsole() {
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
+        return;
+    const auto reopen = [](DWORD which, FILE *stream, const char *device, const char *mode) {
+        const HANDLE handle = GetStdHandle(which);
+        const DWORD type = handle && handle != INVALID_HANDLE_VALUE ? GetFileType(handle) : FILE_TYPE_UNKNOWN;
+        if (type == FILE_TYPE_CHAR || type == FILE_TYPE_UNKNOWN)
+            (void)freopen(device, mode, stream);
+    };
+    reopen(STD_INPUT_HANDLE, stdin, "CONIN$", "r");
+    reopen(STD_OUTPUT_HANDLE, stdout, "CONOUT$", "w");
+    reopen(STD_ERROR_HANDLE, stderr, "CONOUT$", "w");
+}
+}
+#endif
+
 std::optional<int> Cli::handleArguments(int argc, char *argv[], const QString &version) {
+#ifdef Q_OS_WIN
+    const QStringList arguments = windowsArguments();
+#else
     QStringList arguments;
     arguments.reserve(argc);
     for (int index = 0; index < argc; ++index)
         arguments.append(QString::fromLocal8Bit(argv[index]));
+#endif
 
-    if (!isCommand(arguments))
+    if (!isCommand(arguments)) {
+#ifdef Q_OS_WIN
+        // --help and --version answer in the terminal too.
+        if (arguments.size() > 1 && (arguments.at(1) == QLatin1String("-h") || arguments.at(1) == QLatin1String("--help")
+                                     || arguments.at(1) == QLatin1String("-v") || arguments.at(1) == QLatin1String("--version")))
+            useParentConsole();
+#endif
         return handleArguments(arguments, version);
+    }
+#ifdef Q_OS_WIN
+    useParentConsole();
+#endif
 
     // Commands run without a display, as a plain (non-GUI) application, with
     // the app's name so they read its settings.

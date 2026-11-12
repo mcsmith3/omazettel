@@ -1,4 +1,5 @@
 #include "noteindex.h"
+#include "startuptiming.h"
 
 #include "markdownhighlighter.h"
 #include "vault.h"
@@ -106,6 +107,7 @@ NoteIndex::Note NoteIndex::readNote(const QString &path) {
 }
 
 QHash<QString, NoteIndex::Note> NoteIndex::scan(const QString &root) {
+    StartupTiming::Step timing("note scan");
     QHash<QString, Note> notes;
     // Hidden folders (.git, .omazettel) are skipped, as the sidebar does.
     QDirIterator it(root, {QStringLiteral("*.md"), QStringLiteral("*.markdown")},
@@ -386,7 +388,7 @@ int NoteIndex::rewriteLinks(const QVariantMap &moves, const QString &skipPath) {
             continue;
         QSaveFile out(path);
         out.setDirectWriteFallback(true);
-        if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+        if (!out.open(QIODevice::WriteOnly))
             continue;
         out.write(rewritten.toUtf8());
         if (out.commit()) {

@@ -1,4 +1,5 @@
 #include "sync.h"
+#include "startuptiming.h"
 #include <QUrl>
 #include <QJsonObject>
 #include <QJsonDocument>
@@ -35,6 +36,15 @@ QProcessEnvironment gitEnvironment() {
     // Reading the status must not take the lock a sync running at the same
     // time needs.
     env.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
+#ifdef Q_OS_WIN
+    // Git for Windows turns line endings into CRLF on checkout by default.
+    // Notes keep plain ones, as everywhere else, or OmaZettel would see every
+    // note as one it can't save without changing its line endings.
+    const int count = env.value(QStringLiteral("GIT_CONFIG_COUNT")).toInt();
+    env.insert(QStringLiteral("GIT_CONFIG_KEY_%1").arg(count), QStringLiteral("core.autocrlf"));
+    env.insert(QStringLiteral("GIT_CONFIG_VALUE_%1").arg(count), QStringLiteral("false"));
+    env.insert(QStringLiteral("GIT_CONFIG_COUNT"), QString::number(count + 1));
+#endif
     return env;
 }
 
@@ -118,7 +128,7 @@ QStringList absolutePaths(const QString &root, const QString &names) {
 bool writeText(const QString &path, const QString &text) {
     QSaveFile file(path);
     file.setDirectWriteFallback(true);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!file.open(QIODevice::WriteOnly))
         return false;
     file.write(text.toUtf8());
     return file.commit();
@@ -241,6 +251,7 @@ void Sync::setRoot(const QString &notesRoot) {
 }
 
 void Sync::refresh() {
+    StartupTiming::Step timing("sync refresh");
     m_commitName.clear();
     m_commitEmail.clear();
     m_hostKindSetting.clear();
@@ -976,7 +987,7 @@ void Sync::log(const QString &repoRoot, const QString &what, const Result &resul
         }
     }
     QFile file(path);
-    if (!file.open(QIODevice::Append | QIODevice::Text))
+    if (!file.open(QIODevice::Append))
         return;
     QString entry = QStringLiteral("%1  %2  %3  %4: %5\n")
                         .arg(QDateTime::currentDateTime().toString(Qt::ISODate), repoRoot, what,

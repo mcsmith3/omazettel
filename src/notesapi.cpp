@@ -684,7 +684,7 @@ void NotesApi::write(const QString &path, const QString &text) {
     QString out = text;
     if (!out.endsWith(QLatin1Char('\n')))
         out += QLatin1Char('\n');
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text) || file.write(out.toUtf8()) < 0 || !file.commit())
+    if (!file.open(QIODevice::WriteOnly) || file.write(out.toUtf8()) < 0 || !file.commit())
         fail(QStringLiteral("Could not write %1.").arg(relative(path)));
 }
 
