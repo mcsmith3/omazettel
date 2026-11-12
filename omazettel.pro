@@ -27,6 +27,7 @@ HEADERS += \
     src/notestree.h \
     src/pdfdocument.h \
     src/singleinstance.h \
+    src/startuptiming.h \
     src/vault.h \
     src/zettel.h
 
@@ -76,3 +77,5 @@ macx {
     ICON = packaging/macos/omazettel.icns
     QMAKE_INFO_PLIST = packaging/macos/Info.plist
 }
+# CommandLineToArgvW and AllowSetForegroundWindow.
+win32: LIBS += -lshell32 -luser32

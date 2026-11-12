@@ -63,3 +63,5 @@ QT += widgets printsupport quickcontrols2 quickdialogs2 dbus
 
 # Windows: straight into the build folder, as elsewhere.
 win32: CONFIG -= debug_and_release debug_and_release_target
+# CommandLineToArgvW and AllowSetForegroundWindow.
+win32: LIBS += -lshell32 -luser32

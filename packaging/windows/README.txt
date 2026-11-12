@@ -9,7 +9,9 @@ Running it
 ----------
 Keep this folder somewhere of your own, such as
 %LOCALAPPDATA%\Programs\OmaZettel, and open omazettel.exe. Right-click it
-and pick "Pin to Start" or "Pin to taskbar" to keep it handy.
+and pick "Pin to Start" or "Pin to taskbar" to keep it handy. Not in
+Program Files (x86): that is for 32-bit programs, and updating there needs
+administrator rights.
 
 Windows may say it protected your PC the first time, because this download
 isn't signed: click "More info", then "Run anyway".
@@ -34,7 +36,9 @@ What else it uses
 
 Notes you already sync from another computer
 --------------------------------------------
-Clone them with plain line endings, then choose that folder in OmaZettel:
+Do this before opening OmaZettel the first time, so it doesn't start a
+separate notes history of its own. Clone them with plain line endings, then
+choose that folder in OmaZettel:
 
     git clone -c core.autocrlf=false https://github.com/you/notes.git %USERPROFILE%\Notes
 
@@ -42,6 +46,16 @@ Without -c core.autocrlf=false, Git for Windows changes every note's line
 endings, and OmaZettel won't save notes automatically. Note names with
 : * ? " < > | can't be checked out on Windows: on your other computer, run
 `omazettel tidy-names --apply` and sync first.
+
+Keep the notes outside OneDrive (the clone above goes to your user folder).
+OneDrive and git sync would both change the same files, which can damage
+the notes' history and slows OmaZettel down.
+
+If OmaZettel is slow to start, run it from a terminal with timings and send
+them to us:
+
+    $env:OMAZETTEL_TIMING = "1"
+    Start-Process .\omazettel.exe -RedirectStandardError timing.txt
 
 Updating and removing
 ---------------------

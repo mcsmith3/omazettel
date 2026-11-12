@@ -1,4 +1,5 @@
 #include "sync.h"
+#include "startuptiming.h"
 #include <QUrl>
 #include <QJsonObject>
 #include <QJsonDocument>
@@ -250,6 +251,7 @@ void Sync::setRoot(const QString &notesRoot) {
 }
 
 void Sync::refresh() {
+    StartupTiming::Step timing("sync refresh");
     m_commitName.clear();
     m_commitEmail.clear();
     m_hostKindSetting.clear();

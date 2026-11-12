@@ -74,21 +74,32 @@ jobs:
       - name: Package
         if: always()
         run: packaging/windows/package.sh
+      # As on a computer without MSYS2: its folder is renamed out of the way,
+      # so Qt can't fall back to the libraries and QML modules in it.
       - name: Check the package runs without MSYS2
         if: always()
         shell: pwsh
         run: |
           $folder = Get-ChildItem dist -Directory | Select-Object -First 1
+          $msys = Join-Path $env:RUNNER_TEMP "msys64"
+          if (Test-Path $msys) { Rename-Item $msys "msys64-hidden" }
           $env:PATH = "C:\Windows\System32;C:\Windows"
           & "$($folder.FullName)\omazettel.com" --version
           if ($LASTEXITCODE -ne 0) { throw "omazettel.com --version failed ($LASTEXITCODE)" }
           $env:QT_QPA_PLATFORM = "offscreen"
-          $app = Start-Process "$($folder.FullName)\omazettel.exe" -PassThru
+          $env:QT_FORCE_STDERR_LOGGING = "1"
+          $env:OMAZETTEL_TIMING = "1"
+          $log = Join-Path $env:RUNNER_TEMP "omazettel-start.txt"
+          $app = Start-Process "$($folder.FullName)\omazettel.exe" -PassThru -RedirectStandardError $log
           Start-Sleep -Seconds 8
-          if ($app.HasExited) { throw "omazettel.exe exited at once ($($app.ExitCode))" }
-          Stop-Process -Id $app.Id
-          Write-Host "omazettel.exe is running; files:"
-          Get-ChildItem $folder.FullName | Measure-Object | ForEach-Object { "$($_.Count) entries" }
+          $exited = $app.HasExited
+          if (-not $exited) { Stop-Process -Id $app.Id }
+          Get-Content $log
+          if ($exited) { throw "omazettel.exe exited at once ($($app.ExitCode))" }
+          if (Select-String -Path $log -Pattern 'not found|module "|Could not load' -Quiet) {
+            throw "omazettel.exe started with QML errors (above)"
+          }
+          Write-Host "omazettel.exe is running"
       # The folder itself, so the download is one zip with OmaZettel's
       # folder inside rather than a zip inside a zip.
       - uses: actions/upload-artifact@v7

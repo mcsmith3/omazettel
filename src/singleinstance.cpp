@@ -5,7 +5,12 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 
-#ifndef Q_OS_WIN
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
 #endif
 
@@ -39,6 +44,11 @@ bool SingleInstance::forwardToRunning(const QStringList &files, int timeoutMs) {
     socket.connectToServer(serverName());
     if (!socket.waitForConnected(timeoutMs / 4))
         return false;
+#ifdef Q_OS_WIN
+    // Windows only lets the program in front hand the front to another, so
+    // let the running window come forward when it gets this.
+    AllowSetForegroundWindow(ASFW_ANY);
+#endif
     const QJsonObject request{{QStringLiteral("files"), QJsonArray::fromStringList(files)},
                               {QStringLiteral("activationToken"), qEnvironmentVariable("XDG_ACTIVATION_TOKEN")}};
     socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');

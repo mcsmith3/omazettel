@@ -1,4 +1,5 @@
 #include "dashboard.h"
+#include "startuptiming.h"
 
 #include "layout.h"
 #include "moc.h"
@@ -220,6 +221,7 @@ Dashboard::Snapshot Dashboard::snapshot(const NoteIndex &index, const QString &r
 }
 
 QJsonObject Dashboard::build(const QString &root, const Snapshot &snapshot, int days, const QDate &today) {
+    StartupTiming::Step timing("dashboard build");
     const QDir base(root);
     const QDate first = today.addDays(-(qMax(1, days) - 1));
     const bool layout = Layout::present(root);

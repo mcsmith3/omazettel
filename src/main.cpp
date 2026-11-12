@@ -8,6 +8,7 @@
 #include <QQuickStyle>
 #include <QUrl>
 #include <QWindow>
+#include <QQuickWindow>
 #include <QElapsedTimer>
 #include <QFileOpenEvent>
 #include <QFile>
@@ -27,6 +28,7 @@
 #include "notetemplates.h"
 #include "pdfdocument.h"
 #include "singleinstance.h"
+#include "startuptiming.h"
 #include "sync.h"
 #include "vault.h"
 
@@ -55,6 +57,7 @@ private:
 #define OMAZETTEL_VERSION "0.13.1"
 
 int main(int argc, char *argv[]) {
+    StartupTiming::mark("started");
     // Answered before the application exists, so they need no display.
     if (const std::optional<int> exitCode =
             Cli::handleArguments(argc, argv, QStringLiteral(OMAZETTEL_VERSION)))
@@ -68,6 +71,7 @@ int main(int argc, char *argv[]) {
         qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
 
     QApplication app(argc, argv);
+    StartupTiming::mark("application made");
     app.setApplicationName(QStringLiteral("omazettel"));
     app.setApplicationVersion(QStringLiteral(OMAZETTEL_VERSION));
     app.setDesktopFileName(QStringLiteral("omazettel"));
@@ -128,11 +132,15 @@ int main(int argc, char *argv[]) {
     // application names are set, since it reads its settings on creation,
     // and before the engine, so it outlives the interface that uses it.
     Vault vault(&app);
+    StartupTiming::mark("notes folder open");
     // The note index follows the notes folder, rescans after the sidebar
     // changes files and whenever the app comes back to the front (to pick up
     // edits made elsewhere, such as in VS Code).
     NoteIndex noteIndex(&app);
-    noteIndex.setRoot(vault.rootPath());
+    {
+        StartupTiming::Step step("note index");
+        noteIndex.setRoot(vault.rootPath());
+    }
     QObject::connect(&vault, &Vault::rootPathChanged, &noteIndex,
                      [&vault, &noteIndex]() { noteIndex.setRoot(vault.rootPath()); });
     QObject::connect(&vault, &Vault::contentsChanged, &noteIndex, &NoteIndex::scheduleRescan);
@@ -153,7 +161,10 @@ int main(int argc, char *argv[]) {
                      [&vault, &citations]() { citations.setRoot(vault.rootPath()); });
     // Sync and version history (git), and synced-folder conflict copies.
     Sync sync(&app);
-    sync.setRoot(vault.rootPath());
+    {
+        StartupTiming::Step step("sync status");
+        sync.setRoot(vault.rootPath());
+    }
     QObject::connect(&vault, &Vault::rootPathChanged, &sync,
                      [&vault, &sync]() { sync.setRoot(vault.rootPath()); });
     QObject::connect(&noteIndex, &NoteIndex::changed, &sync, [&sync]() {
@@ -176,6 +187,11 @@ int main(int argc, char *argv[]) {
                      });
 
     QQmlApplicationEngine engine;
+#ifdef Q_OS_WIN
+    // Qt's own modules (QtQuick.Controls and the rest) are in the qml folder
+    // beside omazettel.exe, which Qt doesn't look in by itself.
+    engine.addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
+#endif
     QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app,
                      [](const QList<QQmlError> &warnings) {
         for (const QQmlError &warning : warnings)
@@ -191,7 +207,9 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("dashboard"), &dashboard);
 
     PdfDocument::install(&engine);
+    StartupTiming::mark("loading the window");
     engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
+    StartupTiming::mark("window loaded");
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Could not load the OmaZettel interface; resource available:"
                     << QFile::exists(QStringLiteral(":/Main.qml"));
@@ -199,6 +217,15 @@ int main(int argc, char *argv[]) {
     }
 
     backend.setParentWindow(qobject_cast<QWindow *>(engine.rootObjects().constFirst()));
+    if (StartupTiming::enabled()) {
+        if (auto *quickWindow = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst()))
+            QObject::connect(quickWindow, &QQuickWindow::frameSwapped, quickWindow,
+                             [] { StartupTiming::mark("first frame shown"); }, Qt::SingleShotConnection);
+        QObject::connect(&dashboard, &Dashboard::loadingChanged, &dashboard, [&dashboard] {
+            if (!dashboard.loading())
+                StartupTiming::mark("dashboard ready");
+        });
+    }
 
     // A later start of OmaZettel: come to the front, and open its file the
     // way opening a note from the sidebar does (saving or asking first).

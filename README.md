@@ -220,15 +220,18 @@ the command line's half, which terminals find before `omazettel.exe`.
 
 Notes you already sync from another computer: on that computer, run
 `omazettel tidy-names --apply` and sync, since Windows can't store names with
-`: * ? " < > |`. Then clone them with plain line endings, which OmaZettel keeps
-everywhere:
+`: * ? " < > |`. Then, before opening OmaZettel the first time (so it doesn't
+start a separate history), clone them with plain line endings, which
+OmaZettel keeps everywhere, to a folder outside OneDrive:
 
 ```sh
 git clone -c core.autocrlf=false https://github.com/you/notes.git %USERPROFILE%\Notes
 ```
 
-For exports, install pandoc (`winget install JohnMacFarlane.Pandoc`).
-Transcribing recordings isn't set up for Windows yet. Settings are kept in the
+OneDrive and git sync on the same folder fight over the files, which can damage
+the history and slows OmaZettel down. For exports, install pandoc
+(`winget install JohnMacFarlane.Pandoc`). A slow start can be timed with
+`OMAZETTEL_TIMING=1`, which prints each step to stderr. Transcribing recordings isn't set up for Windows yet. Settings are kept in the
 registry, under `HKEY_CURRENT_USER\Software\omazettel`.
 
 ## Getting started
